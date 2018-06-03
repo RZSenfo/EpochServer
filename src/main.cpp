@@ -1,6 +1,8 @@
 #include "Epochlib/Epochlib.hpp"
 #ifdef WIN32
 	#include <windows.h>
+    #include <shellapi.h>    //get command line argsW
+
 	EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #else
 	#include <fcntl.h>
@@ -25,23 +27,29 @@ extern "C" {
 }
 #endif
 
+#undef bind
+
 Epochlib *EpochLibrary;
 
-std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
+void split(const std::string &s, char delim, std::vector<std::string> &elems) {
 	std::stringstream ss(s);
 	std::string item;
 
 	while (std::getline(ss, item, delim)) {
-		elems.push_back(item);
+		elems.emplace_back(item);
 	}
+}
 
-	return elems;
+#ifdef WIN32
+#include <locale>
+#include <codecvt>
+std::string ws2s(const std::wstring& wstr) {
+    using convert_typeX = std::codecvt_utf8<wchar_t>;
+    std::wstring_convert<convert_typeX, wchar_t> converterX;
+    return converterX.to_bytes(wstr);
 }
-std::vector<std::string> split(const std::string &s, char delim) {
-	std::vector<std::string> elems;
-	split(s, delim, elems);
-	return elems;
-}
+#endif
+
 
 std::string getProfileFolder() {
 	std::string profileFolder = "";
@@ -49,6 +57,7 @@ std::string getProfileFolder() {
 	std::vector<std::string> commandLine;
 
 #ifdef WIN32
+
 	LPCWSTR cmdLine = GetCommandLineW();
 	LPWSTR *cmdLineArgs = CommandLineToArgvW(cmdLine, &numCmdLineArgs);
 
@@ -56,9 +65,10 @@ std::string getProfileFolder() {
 
 	for (int i = 0; i < numCmdLineArgs; i++) {
 		std::wstring args(cmdLineArgs[i]);
-		std::string utf8(args.begin(), args.end());
+		std::string utf8 = ws2s(args);
 		commandLine.push_back(utf8);
 	}
+
 #else
 	std::stringstream cmdlinePath;
 	cmdlinePath << "/proc/" << (int)getpid() << "/cmdline";
@@ -89,15 +99,19 @@ std::string getProfileFolder() {
 	return profileFolder;
 }
 
-std::string join(std::vector<std::string> split, int index) {
+std::string join(const std::vector<std::string>& split, int index) {
 	std::stringstream joinedString;
 
-	for (std::vector<std::string>::iterator
-		it = split.begin() + index;
-		it != split.end();
-	) {
-		joinedString << ((split.begin() + index) != it ? SEPARATOR : "") << *it;
-		it++;
+    //fetch the only one without seperator before
+    //removes n-1 checks + possibly better loop unrolling
+    auto it = split.begin() + index;
+    if (it != split.end()) {
+        joinedString << *it;
+        it++;
+    }
+
+	for (; it != split.end(); it++) {
+		joinedString << SEPARATOR << *it;
 	}
 
 	return joinedString.str();
@@ -106,291 +120,211 @@ std::string join(std::vector<std::string> split, int index) {
 /*
 	Handler
 */
-std::string handler000(std::vector<std::string> _param) {
-	return EpochLibrary->getConfig();
+void handler000(const std::vector<std::string>& _param, std::string& output) {
+	output = EpochLibrary->getConfig();
 }
-std::string handler001(std::vector<std::string> _param) {
-	if (_param.size() >= 1) {
-		std::thread process(std::bind(&Epochlib::initPlayerCheck, EpochLibrary, atoll(_param[0].c_str())));
-		process.detach();
-	}
-
-	return "";
-}
-/*
-std::string handler100(std::vector<std::string> _param) {
-	if (_param.size() >= 3) {
-		return EpochLibrary->setTemp(_param[0], _param[1], join(_param, 2));
-	}
-
-	return "";
-}
-std::string handler101(std::vector<std::string> _param) {
-	if (_param.size() >= 3) {
-		std::thread process(std::bind(&Epochlib::setTemp, EpochLibrary, _param[0], _param[1], join(_param, 2)));
-		process.detach();
-	}
-
-	return "";
-}
-*/
-
-std::string handler110(std::vector<std::string> _param) {
-	if (_param.size() >= 3) {
-		return EpochLibrary->set(_param[0], _param[1], join(_param, 2));
-	}
-
-	return "";
-}
-std::string handler111(std::vector<std::string> _param) {
-	if (_param.size() >= 3) {
-		std::thread process(std::bind(&Epochlib::set, EpochLibrary, _param[0], _param[1], join(_param, 2)));
-		process.detach();
-	}
-
-	return "";
-}
-
-std::string handler120(std::vector<std::string> _param) {
-	if (_param.size() >= 4) {
-		return EpochLibrary->setex(_param[0], _param[1], _param[2], join(_param,3));
-	}
-
-	return "";
-}
-std::string handler121(std::vector<std::string> _param) {
-	if (_param.size() >= 4) {
-		std::thread process(std::bind(&Epochlib::setex, EpochLibrary, _param[0], _param[1], _param[2], join(_param, 3)));
-		process.detach();
-	}
-
-	return "";
-}
-
-std::string handler130(std::vector<std::string> _param) {
-	if (_param.size() == 2) {
-		return EpochLibrary->expire(_param[0], _param[1]);
-	}
-
-	return "";
-}
-std::string handler131(std::vector<std::string> _param) {
-	if (_param.size() == 2) {
-		std::thread process(std::bind(&Epochlib::expire, EpochLibrary, _param[0], _param[1]));
-		process.detach();
-	}
-
-	return "";
-}
-
-std::string handler141(std::vector<std::string> _param) {
+void handler001(const std::vector<std::string>& _param, std::string&) {
 	if (_param.size() >= 2) {
-		std::thread process(std::bind(&Epochlib::setbit, EpochLibrary, _param[0], _param[1], _param[2]));
-		process.detach();
+		std::thread(std::bind(&Epochlib::initPlayerCheck, EpochLibrary, atoll(_param[1].c_str()))).detach();
 	}
-
-	return "";
 }
 
-std::string handler200(std::vector<std::string> _param) {
-	if (_param.size() >= 1) {
-		return EpochLibrary->get(join(_param, 0));
+void handler110(const std::vector<std::string>& _param, std::string& output) {
+	if (_param.size() >= 4) {
+		output = EpochLibrary->set(_param[1], _param[2], join(_param, 3));
 	}
-
-	return "";
 }
-std::string handler210(std::vector<std::string> _param) {
-	if (_param.size() >= 1) {
-		return EpochLibrary->getTtl(join(_param, 0));
-	}
 
-	return "";
+void handler111(const std::vector<std::string>& _param, std::string& output) {
+	if (_param.size() >= 4) {
+		std::thread(std::bind(&Epochlib::set, EpochLibrary, _param[1], _param[2], join(_param, 3))).detach();
+	}
+}
+
+void handler120(const std::vector<std::string>& _param, std::string& output) {
+	if (_param.size() >= 5) {
+		output = EpochLibrary->setex(_param[1], _param[2], _param[3], join(_param,4));
+	}
+}
+
+void handler121(const std::vector<std::string>& _param, std::string&) {
+	if (_param.size() >= 5) {
+		std::thread(std::bind(&Epochlib::setex, EpochLibrary, _param[1], _param[2], _param[3], join(_param, 4))).detach();
+	}
+}
+
+void handler130(const std::vector<std::string>& _param, std::string& output) {
+	if (_param.size() == 3) {
+		output = EpochLibrary->expire(_param[1], _param[2]);
+	}
+}
+
+void handler131(const std::vector<std::string>& _param, std::string&) {
+	if (_param.size() == 3) {
+		std::thread(std::bind(&Epochlib::expire, EpochLibrary, _param[1], _param[2])).detach();
+	}
+}
+
+void handler141(const std::vector<std::string>& _param, std::string&) {
+	if (_param.size() >= 3) {
+		std::thread(std::bind(&Epochlib::setbit, EpochLibrary, _param[1], _param[2], _param[3])).detach();
+	}
+}
+
+void handler200(const std::vector<std::string>& _param, std::string& output) {
+	if (_param.size() >= 2) {
+		output = EpochLibrary->get(join(_param, 1));
+	}
+}
+
+void handler210(const std::vector<std::string>& _param, std::string& output) {
+	if (_param.size() >= 2) {
+		output = EpochLibrary->getTtl(join(_param, 1));
+	}
 }
 
 // Get Range
-std::string handler220(std::vector<std::string> _param) {
+void handler220(const std::vector<std::string>& _param, std::string& output) {
+	if (_param.size() >= 4) {
+		output = EpochLibrary->getRange(_param[1], _param[2], _param[3]);
+	}
+}
+
+void handler240(const std::vector<std::string>& _param, std::string& output) {
+	if (_param.size() == 3) {
+		output = EpochLibrary->getbit(_param[1], _param[2]);
+	}
+}
+
+void handler250(const std::vector<std::string>& _param, std::string& output) {
+	if (_param.size() >= 2) {
+		output = EpochLibrary->exists(join(_param, 1));
+	}
+}
+
+void handler300(const std::vector<std::string>& _param, std::string& output) {
+	if (_param.size() >= 2) {
+		output = EpochLibrary->ttl(join(_param, 1));
+	}
+}
+
+void handler400(const std::vector<std::string>& _param, std::string& output) {
+	if (_param.size() >= 2) {
+		output = EpochLibrary->del(join(_param, 1));
+	}
+}
+
+void handler500(const std::vector<std::string>& _param, std::string& output) {
+	output = EpochLibrary->ping();
+}
+
+void handler510(const std::vector<std::string>& _param, std::string& output) {
+	output = EpochLibrary->getCurrentTime();
+}
+
+void handler600(const std::vector<std::string>& _param, std::string& output) {
+	if (_param.size() >= 2) {
+		output = EpochLibrary->lpopWithPrefix("CMD:", join(_param, 1));
+	}
+}
+
+void handler700(const std::vector<std::string>& _param, std::string& output) {
 	if (_param.size() >= 3) {
-		return EpochLibrary->getRange(_param[0], _param[1], _param[2]);
+		output = EpochLibrary->log(_param[1], join(_param, 2));
 	}
-
-	return "";
 }
 
-
-
-std::string handler240(std::vector<std::string> _param) {
-	if (_param.size() == 2) {
-		return EpochLibrary->getbit(_param[0], _param[1]);
+void handler701(const std::vector<std::string>& _param, std::string&) {
+	if (_param.size() >= 3) {
+		std::thread(std::bind(&Epochlib::log, EpochLibrary, _param[1], join(_param, 2))).detach();
 	}
-
-	return "";
 }
 
-std::string handler250(std::vector<std::string> _param) {
-	if (_param.size() >= 1) {
-		return EpochLibrary->exists(join(_param, 0));
-	}
-
-	return "";
-}
-
-std::string handler300(std::vector<std::string> _param) {
-	if (_param.size() >= 1) {
-		return EpochLibrary->ttl(join(_param, 0));
-	}
-
-	return "";
-}
-
-std::string handler400(std::vector<std::string> _param) {
-	if (_param.size() >= 1) {
-		return EpochLibrary->del(join(_param, 0));
-	}
-
-	return "";
-}
-
-std::string handler500(std::vector<std::string> _param) {
-	return EpochLibrary->ping();
-}
-
-std::string handler510(std::vector<std::string> _param) {
-	return EpochLibrary->getCurrentTime();
-}
-
-std::string handler600(std::vector<std::string> _param) {
-	if (_param.size() >= 1) {
-		return EpochLibrary->lpopWithPrefix("CMD:", join(_param, 0));
-	}
-
-	return "";
-}
-
-std::string handler700(std::vector<std::string> _param) {
+void handler800(const std::vector<std::string>& _param, std::string& output) {
 	if (_param.size() >= 2) {
-		return EpochLibrary->log(_param[0], join(_param, 1));
+        output = EpochLibrary->updatePublicVariable(
+            std::vector<std::string>(
+                _param.begin() + 1,
+                _param.end()
+            )
+        );
 	}
-
-	return "";
 }
-std::string handler701(std::vector<std::string> _param) {
+void handler801(const std::vector<std::string>& _param, std::string&) {
 	if (_param.size() >= 2) {
-		std::thread process(std::bind(&Epochlib::log, EpochLibrary, _param[0], join(_param, 1)));
-		process.detach();
+		std::thread(std::bind(&Epochlib::updatePublicVariable, 
+            EpochLibrary, 
+            std::vector<std::string>(_param.begin() + 1, _param.end()))
+        ).detach();
 	}
-
-	return "";
 }
 
-std::string handler800(std::vector<std::string> _param) {
-	if (_param.size() >= 1) {
-		return EpochLibrary->updatePublicVariable(_param);
-	}
-
-	return "";
-}
-std::string handler801(std::vector<std::string> _param) {
-	if (_param.size() >= 1) {
-		std::thread process(std::bind(&Epochlib::updatePublicVariable, EpochLibrary, _param));
-		process.detach();
-	}
-
-	return "";
-}
-
-std::string handler810(std::vector<std::string> _param) {
+void handler810(const std::vector<std::string>& _param, std::string& output) {
 	if (_param.size() == 1) {
-		return EpochLibrary->getRandomString(atoi(_param[0].c_str()));
+		output = EpochLibrary->getRandomString(atoi(_param[1].c_str()));
 	}
 	else if(_param.size() == 0) {
-		return EpochLibrary->getRandomString(1);
+		output = EpochLibrary->getRandomString(1);
 	}
-
-	return "";
 }
 
-std::string handler820(std::vector<std::string> _param) {
-	if (_param.size() >= 2) {
-		return EpochLibrary->addBan(atoll(_param[0].c_str()), join(_param, 1));
+void handler820(const std::vector<std::string>& _param, std::string& output) {
+	if (_param.size() >= 3) {
+		output = EpochLibrary->addBan(atoll(_param[1].c_str()), join(_param, 2));
 	}
-
-	return "";
 }
-std::string handler821(std::vector<std::string> _param) {
-	if (_param.size() >= 2) {
-		std::thread process(std::bind(&Epochlib::addBan, EpochLibrary, atoll(_param[0].c_str()), join(_param, 1)));
-		process.detach();
+void handler821(const std::vector<std::string>& _param, std::string&) {
+	if (_param.size() >= 3) {
+		std::thread(std::bind(&Epochlib::addBan, EpochLibrary, atoll(_param[1].c_str()), join(_param, 2))).detach();
 	}
-
-	return "";
 }
 
-std::string handler830(std::vector<std::string> _param) {
-	return EpochLibrary->increaseBancount();
+void handler830(const std::vector<std::string>& _param, std::string& output) {
+	output = EpochLibrary->increaseBancount();
 }
 
-std::string handler840(std::vector<std::string> _param) {
+void handler840(const std::vector<std::string>& _param, std::string& output) {
 	if (_param.size() >= 1) {
-		return EpochLibrary->getStringMd5(_param);
+		output = EpochLibrary->getStringMd5(std::vector<std::string>(_param.begin()+1,_param.end()));
 	}
-
-	return "";
 }
 
 // Battleye Integration
 
 // say  (Message)
-std::string handler901(std::vector<std::string> _param) {
-        if (_param.size() > 0) {
-        	std::thread process(std::bind(&Epochlib::beBroadcastMessage, EpochLibrary, _param[0]));
-		process.detach();
+void handler901(const std::vector<std::string>& _param, std::string&) {
+    if (_param.size() > 1) {
+    	std::thread(std::bind(&Epochlib::beBroadcastMessage, EpochLibrary, _param[1])).detach();
 	}
-
-        return "";
 }
 
 // kick (playerUID, Message)
-std::string handler911(std::vector<std::string> _param) {
-        if (_param.size() > 1) {
-        	std::thread process(std::bind(&Epochlib::beKick, EpochLibrary, _param[0], _param[1]));
-		process.detach();
+void handler911(const std::vector<std::string>& _param, std::string&) {
+    if (_param.size() > 2) {
+    	std::thread(std::bind(&Epochlib::beKick, EpochLibrary, _param[1], _param[2])).detach();
 	}
-
-	return "";
 }
 
 // ban  (playerUID, Message, Duration)
-std::string handler921(std::vector<std::string> _param) {
-        if (_param.size() > 2) {
-        	std::thread process(std::bind(&Epochlib::beBan, EpochLibrary, _param[0], _param[1], _param[2]));
-        	process.detach();
+void handler921(const std::vector<std::string>& _param, std::string&) {
+    if (_param.size() > 3) {
+        std::thread (std::bind(&Epochlib::beBan, EpochLibrary, _param[1], _param[2], _param[3])).detach();
 	}
-
-	return "";
 }
 
 // lock
-std::string handler931(std::vector<std::string> _param) {
-	std::thread process(std::bind(&Epochlib::beLock, EpochLibrary));
-	process.detach();
-
-	return "";
+void handler931(const std::vector<std::string>& _param, std::string&) {
+	std::thread(std::bind(&Epochlib::beLock, EpochLibrary)).detach();
 }
 
 // unlock
-std::string handler930(std::vector<std::string> _param) {
-	std::thread process(std::bind(&Epochlib::beUnlock, EpochLibrary));
-	process.detach();
-
-	return "";
+void handler930(const std::vector<std::string>& _param, std::string&) {
+	std::thread(std::bind(&Epochlib::beUnlock, EpochLibrary)).detach();
 }
 
 // shutdown
-std::string handler991(std::vector<std::string> _param) {
-	std::thread process(std::bind(&Epochlib::beShutdown, EpochLibrary));
-	process.detach();
-
-	return "";
+void handler991(const std::vector<std::string>& _param, std::string&) {
+	std::thread(std::bind(&Epochlib::beShutdown, EpochLibrary)).detach();
 }
 
 
@@ -408,17 +342,20 @@ void __stdcall RVExtension(char *_output, int _outputSize, const char *_function
 #elif __linux__
 void RVExtension(char *_output, int _outputSize, const char *_function) {
 #endif
-	std::vector<std::string> rawCmd = split(std::string(_function), SEPARATOR[0]);
+    std::vector<std::string> rawCmd; 
+    split(std::string(_function), SEPARATOR[0], rawCmd);
 	std::string hiveOutput = "";
 
 	if (EpochLibrary == NULL) {
 		std::string configPath;
 
 #ifdef WIN32
+
 		// Get file path
-		char DllPath[MAX_PATH];
-		GetModuleFileName((HINSTANCE)&__ImageBase, DllPath, _countof(DllPath));
-		std::string filePath(DllPath);
+		WCHAR DllPath[MAX_PATH];
+		GetModuleFileName((HINSTANCE)&__ImageBase, DllPath, MAX_PATH);
+		
+        std::string filePath = ws2s(DllPath);
 
 		// Get file folder and use it as config folder
 		configPath = filePath.substr(0, filePath.find_last_of("\\/"));
@@ -430,173 +367,214 @@ void RVExtension(char *_output, int _outputSize, const char *_function) {
 	}
 
 	if (rawCmd.size() > 0) {
-		// Get config
-		if (rawCmd[0] == "000") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler000(rawCmd);
-		}
-		// Initial player check
-		else if (rawCmd[0] == "001") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler001(rawCmd);
-		}
-		/*
-		// SET temp
-		else if (rawCmd[0] == "100") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler100(rawCmd);
-		}
-		else if (rawCmd[0] == "101") { // Async
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler101(rawCmd);
-		}
-		*/
-		// SET
-		else if (rawCmd[0] == "110") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler110(rawCmd);
-		}
-		else if (rawCmd[0] == "111") { // Async
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler111(rawCmd);
-		}
-		// SETEX
-		else if (rawCmd[0] == "120") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler120(rawCmd);
-		}
-		else if (rawCmd[0] == "121") { // Async
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler121(rawCmd);
-		}
-		// EXPIRE
-		else if (rawCmd[0] == "130") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler130(rawCmd);
-		}
-		else if (rawCmd[0] == "131") { // Async
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler131(rawCmd);
-		}
-		// SETBIT
-		else if (rawCmd[0] == "141") { // Async
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler141(rawCmd);
-		}
-		// GET
-		else if (rawCmd[0] == "200") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler200(rawCmd);
-		}
-		else if (rawCmd[0] == "210") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler210(rawCmd);
-		}
-		else if (rawCmd[0] == "220") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler220(rawCmd);
-		}
-		else if (rawCmd[0] == "240") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler240(rawCmd);
-		}
-		// TTL
-		else if (rawCmd[0] == "300") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler300(rawCmd);
-		}
-		else if (rawCmd[0] == "400") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler400(rawCmd);
-		}
-		// Utilities
-		else if (rawCmd[0] == "500") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler500(rawCmd);
-		}
-		else if (rawCmd[0] == "510") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler510(rawCmd);
-		}
-		// Array
-		else if (rawCmd[0] == "600") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler600(rawCmd);
-		}
-		// Logging
-		else if (rawCmd[0] == "700") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler700(rawCmd);
-		}
-		else if (rawCmd[0] == "701") { // Async
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler701(rawCmd);
-		}
-		// Antihack
-		else if (rawCmd[0] == "800") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler800(rawCmd);
-		}
-		else if (rawCmd[0] == "801") { // Async
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler801(rawCmd);
-		}
-		else if (rawCmd[0] == "810") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler810(rawCmd);
-		}
-		else if (rawCmd[0] == "820") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler820(rawCmd);
-		}
-		else if (rawCmd[0] == "821") { // Async
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler821(rawCmd);
-		}
-		else if (rawCmd[0] == "830") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler830(rawCmd);
-		}
-		else if (rawCmd[0] == "840") { // string to md5
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler840(rawCmd);
-		}
-		// Battleye Integration
-		else if (rawCmd[0] == "901") { // say  (Message)
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler901(rawCmd);
-		}
-		else if (rawCmd[0] == "911") { // kick (playerUID, Message)
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler911(rawCmd);
-		}
-		else if (rawCmd[0] == "921") { // ban  (playerUID, Message, Duration)
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler921(rawCmd);
-		}
-		else if (rawCmd[0] == "930") { // Unlock
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler930(rawCmd);
-		}
-		else if (rawCmd[0] == "931") { // Lock Server
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler931(rawCmd);
-		}
-		else if (rawCmd[0] == "991") { // shutdown
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handler991(rawCmd);
-		}
+		
+        std::string &callType = rawCmd[0];
+        
+        if (callType.size() == 3) {
+
+            char callPrefix = callType[0];
+            char functionType = callType[0];
+            char asyncFlag = callType[2];
+
+            switch (callPrefix) {
+            case '0': {
+                //SETUP
+                if (asyncFlag == '0') {
+                    //get config
+                    handler000(rawCmd, hiveOutput);
+                }
+                else {
+                    //initial player check
+                    handler001(rawCmd, hiveOutput);
+                }
+                break;
+            }
+            case '1': {
+                // SET
+                switch (functionType) {
+                case '1': {
+                    //SET
+                    if (asyncFlag == '0') {
+                        handler110(rawCmd, hiveOutput);
+                    }
+                    else {
+                        handler111(rawCmd, hiveOutput);
+                    };
+                    break;
+                }
+                case '2': {
+                    //SETEX
+                    if (asyncFlag == '0') {
+                        handler120(rawCmd, hiveOutput);
+                    }
+                    else {
+                        handler121(rawCmd, hiveOutput);
+                    };
+                    break;
+                }
+                case '3': {
+                    //EXPIRE
+                    if (asyncFlag == '0') {
+                        handler130(rawCmd, hiveOutput);
+                    }
+                    else {
+                        handler131(rawCmd, hiveOutput);
+                    };
+                    break;
+                }
+                case '4': {
+                    //SETBIT
+                    handler141(rawCmd, hiveOutput);
+                    break;
+                }
+                }
+
+                break;
+            }
+            case '2': {
+                //GET   
+                switch (functionType) {
+                case '0': {
+                    handler200(rawCmd, hiveOutput);
+                    break;
+                }
+                case '1': {
+                    handler210(rawCmd, hiveOutput);
+                    break;
+                }
+                case '2': {
+                    handler220(rawCmd, hiveOutput);
+                    break;
+                }
+                case '4': {
+                    handler240(rawCmd, hiveOutput);
+                    break;
+                }
+                }
+                break;
+            }
+            case '3': {
+                //TTL
+                handler300(rawCmd, hiveOutput);
+                break;
+            }
+            case '4': {
+                //TTL
+                handler400(rawCmd, hiveOutput);
+                break;
+            }
+            case '5': {
+                //UTIL
+                if (functionType == '0') {
+                    handler500(rawCmd, hiveOutput);
+                }
+                else {
+                    handler510(rawCmd, hiveOutput);
+                }
+                break;
+            }
+            case '6': {
+                //ARRAY
+                handler600(rawCmd, hiveOutput);
+                break;
+            }
+            case '7': {
+                //LOGGING
+                if (asyncFlag == '0') {
+                    //sync
+                    handler700(rawCmd, hiveOutput);
+                }
+                else {
+                    // Async
+                    handler701(rawCmd, hiveOutput);
+                }
+                break;
+            }
+            case '8': {
+                //ANTIHACK
+                switch (functionType) {
+                case '0': {
+                    if (asyncFlag == '0') {
+                        handler800(rawCmd, hiveOutput);
+                    }
+                    else {
+                        handler801(rawCmd, hiveOutput);
+                    }
+                    break;
+                }
+                case '1': {
+                    handler810(rawCmd, hiveOutput);
+                    break;
+                }
+                case '2': {
+                    if (asyncFlag == '0') {
+                        handler820(rawCmd, hiveOutput);
+                    }
+                    else {
+                        handler821(rawCmd, hiveOutput);
+                    }
+                    break;
+                }
+                case '3': {
+                    handler830(rawCmd, hiveOutput);
+                    break;
+                }
+                case '4': { // string to md5
+                    handler840(rawCmd, hiveOutput);
+                    break;
+                }
+                }
+                break;
+            }
+            case '9': {
+                //BATTLEYE
+                switch (functionType) {
+                case '0': { // say  (Message)
+                    handler901(rawCmd, hiveOutput);
+                    break;
+                }
+                case '1': { // kick (playerUID, Message)
+                    handler911(rawCmd, hiveOutput);
+                    break;
+                }
+                case '2': { // ban  (playerUID, Message, Duration)
+                    handler921(rawCmd, hiveOutput);
+                    break;
+                }
+                case '3': {
+                    if (asyncFlag == '0') {
+                        // Unlock
+                        handler930(rawCmd, hiveOutput);
+                    }
+                    else {
+                        // Lock Server
+                        handler931(rawCmd, hiveOutput);
+                    }
+                    break;
+                }
+                case '9': {
+                    // shutdown
+                    handler991(rawCmd, hiveOutput);
+                    break;
+                }
+                }
+                break;
+            }
 #ifdef EPOCHLIB_TEST
-		else if (rawCmd[0] == "T100") {
-			rawCmd.erase(rawCmd.begin(), rawCmd.begin() + 1);
-			hiveOutput = handlerT100(rawCmd);
-		}
+            case 'T': {
+                handlerT100(rawCmd, hiveOutput);
+            }
 #endif
-		else {
-			hiveOutput = "Unkown command " + rawCmd[0];
-			//std::string OStext = std::to_string(_outputSize);
-			//hiveOutput = "Unkown command " + rawCmd[0] + " Max Output " + OStext;
-		}
+            default: {
+                hiveOutput = "Unkown command " + rawCmd[0];
+                //std::string OStext = std::to_string(_outputSize);
+                //hiveOutput = "Unkown command " + rawCmd[0] + " Max Output " + OStext;
+            }
+            }
+        }
+        else {
+            hiveOutput = "Unkown command " + rawCmd[0];
+        }
 	}
 	else {
 		hiveOutput = "0.6.0.0";

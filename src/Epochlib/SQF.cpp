@@ -27,9 +27,7 @@ void SQF::push_str(const char *_string) {
 }
 
 void SQF::push_number(long long int _number) {
-	std::stringstream string;
-	string << _number;
-	this->arrayStack.push_back(string.str());
+	this->arrayStack.emplace_back(std::to_string(_number));
 }
 void SQF::push_number(const char *_number, size_t _numberSize) {
 	if (_numberSize > 0) {
@@ -38,7 +36,7 @@ void SQF::push_number(const char *_number, size_t _numberSize) {
 		this->arrayStack.push_back(string);
 	}
 	else {
-		this->arrayStack.push_back("nil");
+		this->arrayStack.emplace_back("nil");
 	}
 }
 
@@ -50,7 +48,7 @@ void SQF::push_array(const char *_string) {
 		this->arrayStack.push_back("nil");
 	}
 }
-void SQF::push_array(std::string _string) {
+void SQF::push_array(const std::string& _string) {
 	this->push_array(_string.c_str());
 }
 
@@ -58,12 +56,14 @@ std::string SQF::toArray() {
 	std::stringstream arrayStream;
 	arrayStream << "[";
 
-	for (std::vector<std::string>::iterator
-		it = this->arrayStack.begin();
-		it != this->arrayStack.end();
-	) {
-		arrayStream << (this->arrayStack.begin() != it ? "," : "") << *it;
-		it++;
+    auto it = this->arrayStack.begin();
+    if (it != this->arrayStack.end()) {
+        arrayStream << *it;
+        it++;
+    }
+
+    for (; it != this->arrayStack.end(); it++) {
+		arrayStream << "," << *it;
 	}
 
 	arrayStream << "]";

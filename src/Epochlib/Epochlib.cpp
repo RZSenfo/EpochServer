@@ -1,11 +1,13 @@
 #include "Epochlib.hpp"
 #include "../SteamAPI/SteamAPI.hpp"
 #include "../BattlEye/BEClient.hpp"
+
 #include <cstdlib>
 #include <ctime>
 #include <algorithm>
 #include <iomanip>
-
+#include <sstream>
+#include <fstream>
 
 Epochlib::Epochlib(std::string _configPath, std::string _profilePath, int _outputSize) {
 	this->initialized = false;
@@ -37,6 +39,7 @@ Epochlib::Epochlib(std::string _configPath, std::string _profilePath, int _outpu
 		exit(1);
 	}
 
+    
 #ifndef EPOCHLIB_TEST
 	this->redis = new RedisConnector(this->config.redis);
 #endif
@@ -60,6 +63,7 @@ Epochlib::Epochlib(std::string _configPath, std::string _profilePath, int _outpu
 	}
 
 	this->tempGet.success = 0;
+    
 }
 Epochlib::~Epochlib() {
 
@@ -173,13 +177,12 @@ std::string Epochlib::initPlayerCheck(int64 _steamId) {
 	return "";
 }
 
-std::string Epochlib::addBan(int64 _steamId, std::string _reason) {
+std::string Epochlib::addBan(int64 _steamId, const std::string& _reason) {
 	std::string battleyeGUID = this->_getBattlEyeGUID(_steamId);
 	std::string bansFilename = this->config.battlEyePath + "/bans.txt";
 	SQF returnSQF;
 
-	std::ofstream bansFile;
-	bansFile.open(bansFilename, std::ios::app);
+	std::ofstream bansFile(bansFilename, std::ios::app);
 	if (bansFile.good()) {
 		bansFile << battleyeGUID << " -1 " << _reason << std::endl;
 		bansFile.close();
@@ -206,7 +209,7 @@ std::string Epochlib::addBan(int64 _steamId, std::string _reason) {
                 } else {
                     this->logger->log("BEClient: login failed!");
                 }
-                bec.disconnect   ();
+                bec.disconnect();
 
 		returnSQF.push_str("1");
 		returnSQF.push_str(battleyeGUID.c_str());
@@ -219,7 +222,7 @@ std::string Epochlib::addBan(int64 _steamId, std::string _reason) {
 	return returnSQF.toArray();
 }
 
-std::string Epochlib::updatePublicVariable(std::vector<std::string> _whitelistStrings) {
+std::string Epochlib::updatePublicVariable(const std::vector<std::string>& _whitelistStrings) {
 	std::string pvFilename = this->config.battlEyePath + "/publicvariable.txt";
 	std::string pvContent = "";
 	bool pvFileOriginalFound = false;
@@ -281,12 +284,8 @@ std::string Epochlib::updatePublicVariable(std::vector<std::string> _whitelistSt
 	if (pvFileNew.good()) {
 		pvFileNew << pvContent;
 
-		for (std::vector<std::string>::iterator
-			it = _whitelistStrings.begin();
-			it != _whitelistStrings.end();
-		) {
+		for (auto it = _whitelistStrings.begin(); it != _whitelistStrings.end(); it++) {
 			pvFileNew << " !=\"" << *it << "\"";
-			it++;
 		}
 
 		returnSQF.push_str("1");
@@ -307,7 +306,7 @@ std::string Epochlib::updatePublicVariable(std::vector<std::string> _whitelistSt
 	} else {
 	    this->logger->log("BEClient: login failed!");
 	}
-	bec.disconnect   ();
+	bec.disconnect();
 
 	return returnSQF.toArray();
 }
@@ -352,10 +351,10 @@ std::string Epochlib::increaseBancount() {
 	return this->_redisExecToSQF(this->redis->execute("INCR %s", "ahb-cnt"), EPOCHLIB_SQF_STRING).toArray();
 }
 
-std::string Epochlib::getStringMd5(std::vector<std::string> _stringsToHash) {
+std::string Epochlib::getStringMd5(const std::vector<std::string>& _stringsToHash) {
 	SQF returnSQF;
 	
-	for (std::vector<std::string>::iterator it = _stringsToHash.begin(); it != _stringsToHash.end(); ++it) {
+	for (auto it = _stringsToHash.begin(); it != _stringsToHash.end(); ++it) {
 		MD5 md5 = MD5(*it);
 		returnSQF.push_str(md5.hexdigest().c_str());
 	}
@@ -393,7 +392,7 @@ std::string Epochlib::getCurrentTime() {
 }
 
 
-std::string Epochlib::getRange(std::string _key, std::string _value, std::string _value2) {
+std::string Epochlib::getRange(const std::string& _key, const std::string& _value, const std::string& _value2) {
 	SQF returnSqf;
 	EpochlibRedisExecute value = this->redis->execute("GETRANGE %s %s %s", _key.c_str(), _value.c_str(), _value2.c_str());
 	if (value.success == 1) {
@@ -413,7 +412,7 @@ std::string Epochlib::getRange(std::string _key, std::string _value, std::string
 	return returnSqf.toArray();
 }
 
-std::string Epochlib::get(std::string _key) {
+std::string Epochlib::get(const std::string& _key) {
 	SQF returnSqf;
 
 
@@ -469,7 +468,7 @@ std::string Epochlib::get(std::string _key) {
 	return returnSqf.toArray();
 }
 
-std::string Epochlib::getTtl(std::string _key) {
+std::string Epochlib::getTtl(const std::string& _key) {
 	SQF returnSqf;
 
 	// No temp GET found -> GET new one
@@ -496,7 +495,7 @@ std::string Epochlib::getTtl(std::string _key) {
 				messageSize = this->config.outputSize - 20;
 				std::string output = this->tempGet.message.substr(0, messageSize);
 				std::stringstream outputSteam;
-				for (std::string::iterator it = output.begin(); it != output.end(); ++it) {
+				for (auto it = output.begin(); it != output.end(); ++it) {
 					if (*it == '\'') {
 						outputSteam << '\'';
 					}
@@ -530,7 +529,7 @@ std::string Epochlib::getTtl(std::string _key) {
 				this->tempGet.success = 0;
 			}
                         
-                        if (this->tempGet.message.size() >= this->config.outputSize - 20)
+            if (this->tempGet.message.size() >= this->config.outputSize - 20)
 			    this->tempGet.message.erase(this->tempGet.message.begin(), this->tempGet.message.begin() + this->config.outputSize - 20);
 		}
 		else {
@@ -544,24 +543,7 @@ std::string Epochlib::getTtl(std::string _key) {
 	return returnSqf.toArray();
 }
 
-/*
-std::string Epochlib::setTemp(std::string _key, std::string _value, std::string _value2) {
-	
-	// Append to temporarily setter
-	//this->tempSetMutex.lock();
-	//this->tempSet.append(_value);
-	//this->tempSetMutex.unlock();
-	
-	this->redis->execute("APPEND tmp-%s-%s %s", _value.c_str(), _key.c_str(), _value2.c_str());
-	this->redis->execute("EXPIRE tmp-%s-%s 10", _value.c_str(), _key.c_str());
-
-	SQF sqf;
-	sqf.push_number(EPOCHLIB_SQF_RET_SUCESS);
-	return sqf.toArray();
-}
-*/
-
-std::string Epochlib::set(std::string _key, std::string _value, std::string _value2) {
+std::string Epochlib::set(const std::string& _key, const std::string& _value, const std::string& _value2) {
 	// _value not used atm	
 	int regexReturnCode = pcre_exec(this->setValueRegex, NULL, _value2.c_str(), _value2.length(), 0, 0, NULL, NULL);
 	if (regexReturnCode == 0) {
@@ -578,7 +560,7 @@ std::string Epochlib::set(std::string _key, std::string _value, std::string _val
 	}
 }
 
-std::string Epochlib::setex(std::string _key, std::string _ttl, std::string _value2, std::string _value3) {
+std::string Epochlib::setex(const std::string& _key, const std::string& _ttl, const std::string& _value2, const std::string& _value3) {
 	// _value2 not used atm
 	int regexReturnCode = pcre_exec(this->setValueRegex, NULL, _value3.c_str(), _value3.length(), 0, 0, NULL, NULL);
 	if (regexReturnCode == 0) {
@@ -595,23 +577,23 @@ std::string Epochlib::setex(std::string _key, std::string _ttl, std::string _val
 	}
 }
 
-std::string Epochlib::expire(std::string _key, std::string _ttl) {
+std::string Epochlib::expire(const std::string& _key, const std::string& _ttl) {
 	return this->_redisExecToSQF(this->redis->execute("EXPIRE %s %s", _key.c_str(), _ttl.c_str()), EPOCHLIB_SQF_NOTHING).toArray();
 }
 
-std::string Epochlib::setbit(std::string _key, std::string _value, std::string _value2) {
+std::string Epochlib::setbit(const std::string& _key, const std::string& _value, const std::string& _value2) {
 	return this->_redisExecToSQF(this->redis->execute("SETBIT %s %s %s", _key.c_str(), _value.c_str(), _value2.c_str()), EPOCHLIB_SQF_NOTHING).toArray();
 }
 
-std::string Epochlib::getbit(std::string _key, std::string _value) {
+std::string Epochlib::getbit(const std::string& _key, const std::string& _value) {
 	return this->_redisExecToSQF(this->redis->execute("GETBIT %s %s", _key.c_str(), _value.c_str()), EPOCHLIB_SQF_STRING).toArray();
 }
 
-std::string Epochlib::exists(std::string _key) {
+std::string Epochlib::exists(const std::string& _key) {
 	return this->_redisExecToSQF(this->redis->execute("EXISTS %s", _key.c_str()), EPOCHLIB_SQF_STRING).toArray();
 }
 
-std::string Epochlib::del(std::string _key) {
+std::string Epochlib::del(const std::string& _key) {
 	return this->_redisExecToSQF(this->redis->execute("DEL %s", _key.c_str()), EPOCHLIB_SQF_NOTHING).toArray();
 }
 
@@ -619,15 +601,15 @@ std::string Epochlib::ping() {
 	return this->_redisExecToSQF(this->redis->execute("PING"), EPOCHLIB_SQF_NOTHING).toArray();
 }
 
-std::string Epochlib::lpopWithPrefix(std::string _prefix, std::string _key) {
+std::string Epochlib::lpopWithPrefix(const std::string& _prefix, const std::string& _key) {
 	return this->_redisExecToSQF(this->redis->execute("LPOP %s%s", _prefix.c_str(), _key.c_str()), EPOCHLIB_SQF_STRING).toArray();
 }
 
-std::string Epochlib::ttl(std::string _key) {
+std::string Epochlib::ttl(const std::string& _key) {
 	return this->_redisExecToSQF(this->redis->execute("TTL %s", _key.c_str()), EPOCHLIB_SQF_STRING).toArray();
 }
 
-std::string Epochlib::log(std::string _key, std::string _value) {
+std::string Epochlib::log(const std::string& _key, const std::string& _value) {
 	char formatedTime[64];
 	time_t t = time(0);
 	struct tm * currentTime = localtime(&t);
@@ -732,7 +714,7 @@ bool Epochlib::_loadConfig(std::string configFilename) {
 	}
 }
 
-SQF Epochlib::_redisExecToSQF(EpochlibRedisExecute _redisExecute, int _forceMsgOutputType) {
+SQF Epochlib::_redisExecToSQF(const EpochlibRedisExecute& _redisExecute, int _forceMsgOutputType) {
 	SQF returnSQF;
 
 	returnSQF.push_number(_redisExecute.success ? EPOCHLIB_SQF_RET_SUCESS : EPOCHLIB_SQF_RET_FAIL);
@@ -762,7 +744,7 @@ bool Epochlib::_isOffialServer() {
 
 // Battleye Integration
 
-void Epochlib::beBroadcastMessage (std::string msg) {
+void Epochlib::beBroadcastMessage (const std::string& msg) {
 	if (msg.empty()) 
 	    return;
 
@@ -782,7 +764,7 @@ void Epochlib::beBroadcastMessage (std::string msg) {
 	bec.disconnect   ();
 }
 
-void Epochlib::beKick (std::string playerUID, std::string msg) {
+void Epochlib::beKick (const std::string& playerUID, const std::string& msg) {
 	if (playerUID.empty() || msg.empty()) 
 	    return;
 	
@@ -812,13 +794,10 @@ void Epochlib::beKick (std::string playerUID, std::string msg) {
 	bec.disconnect   ();
 }
 
-void Epochlib::beBan(std::string playerUID, std::string msg, std::string duration) {
+void Epochlib::beBan(const std::string& playerUID, const std::string& msg, const std::string& duration) {
     if (playerUID.empty() || msg.empty())
         return;
             
-    if (duration.empty())
-        duration = "-1";
-
     this->logger->log("BEClient: try to connect " + this->config.battlEye.ip);
     BEClient bec     (this->config.battlEye.ip.c_str(), this->config.battlEye.port);
     bec.sendLogin    (this->config.battlEye.password.c_str());
@@ -836,7 +815,7 @@ void Epochlib::beBan(std::string playerUID, std::string msg, std::string duratio
         }
         
         std::stringstream ss;
-        ss << "ban " << playerSlot << ' ' << duration << ' ' << msg;
+        ss << "ban " << playerSlot << ' ' << (duration.empty() ? "-1" : duration) << ' ' << msg;
         bec.sendCommand  (ss.str().c_str());
         bec.readResponse (BE_COMMAND);
     } else {

@@ -10,6 +10,7 @@ typedef long long int int64;
 struct EpochlibConfigRedis {
 	std::string ip;
 	unsigned short int port;
+    std::string user;
 	std::string password;
 	unsigned int dbIndex;
 	Logger *logger;

@@ -1,4 +1,19 @@
 #include "SteamAPI.hpp"
+
+/*
+#define WSASetLastError WSASetLastError
+#define WSAGetLastError WSAGetLastError
+#define WSAIoctl WSAIoctl
+#define WSASend WSASend
+#define WSARecv WSARecv
+#define WSACleanup WSACleanup
+#define WSAGetOverlappedResult WSAGetOverlappedResult
+#define WSADuplicateSocket WSADuplicateSocket
+#define WSASocket WSASocket
+*/
+
+
+
 #include <sstream>
 #include <fstream>
 

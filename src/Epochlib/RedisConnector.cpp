@@ -1,5 +1,21 @@
-#include "Epochlib.hpp"
 #include "RedisConnector.hpp"
+
+#include <sstream>
+
+#ifdef WIN32
+#include "hiredis.h"
+#define INCL_WINSOCK_API_PROTOTYPES 0
+#include <WinSock2.h>
+#define IS_WINDOWS_PLATFORM
+#endif
+
+#ifdef IS_WINDOWS_PLATFORM
+#else
+//#include "../../deps/redis/deps/hiredis/hiredis.h"
+#include <hiredis.h>
+#include <sys/time.h>
+#endif
+
 
 RedisConnector::RedisConnector(EpochlibConfigRedis _config) {
 	this->config = _config;
@@ -58,14 +74,14 @@ void RedisConnector::_reconnect(bool _force) {
 
 	if (this->context == NULL || _force) {
 		int retries = 0;
-		struct timeval timeout { 1, 50000 };
+        struct timeval timeout { 1, 50000 };
 
 		do {
 			if (this->context != NULL) {
 				redisFree(this->context);
 			}
 
-			this->context = redisConnectWithTimeout(this->config.ip.c_str(), this->config.port, timeout);
+            this->context = redisConnectWithTimeout(this->config.ip.c_str(), this->config.port, timeout);
 
 			if (this->context->err) {
 				this->config.logger->log("[Redis] " + std::string(this->context->errstr));

@@ -1,9 +1,10 @@
-#include <string>
-#include "../../deps/happyhttp/happyhttp.h"
-#include "../../deps/rapidjson/include/rapidjson/document.h"
-
 #ifndef __STEAMAPI_H__
 #define __STEAMAPI_H__
+
+#include <string>
+#include <happyhttp.h>
+#include "rapidjson/document.h"
+
 
 struct SteamAPIResponseContent {
 	short int Status;

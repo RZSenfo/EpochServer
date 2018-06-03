@@ -17,7 +17,7 @@ public:
 	void push_number(long long int Number);
 	void push_number(const char *Number, size_t NumberSize);
 	void push_array(const char *String);
-	void push_array(std::string String);
+	void push_array(const std::string& String);
 	std::string toArray();
 };
 
