@@ -13,4 +13,4 @@
     https://github.com/EpochModTeam/Epoch/tree/release/Sources/epoch_server_core/compile/epoch_hive/fn_server_hiveSET.sqf
 */
 params ["_prefix","_key","_value"];
-"epochserver" callExtension ([111,([_prefix,_key] joinString ":"),"",_value] joinString "|")
+"epochserver" callExtension format ["111|%1:%2||%3",_prefix,_key,_value];

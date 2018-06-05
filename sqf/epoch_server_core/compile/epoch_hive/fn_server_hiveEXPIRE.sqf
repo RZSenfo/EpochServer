@@ -12,5 +12,5 @@
     Github:
     https://github.com/EpochModTeam/Epoch/tree/release/Sources/epoch_server_core/compile/epoch_hive/fn_server_hiveEXPIRE.sqf
 */
-params ["_prefix","_key","_expires"];
-"epochserver" callExtension format ["%1|%2:%3|%4", 131, _prefix, _key, _expires];
+//params ["_prefix","_key","_expires"];
+"epochserver" callExtension format (["131|%2:%3|%4"] + _this); // _prefix, _key, _expires];

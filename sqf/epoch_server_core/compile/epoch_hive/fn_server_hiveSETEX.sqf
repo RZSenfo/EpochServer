@@ -13,4 +13,4 @@
     https://github.com/EpochModTeam/Epoch/tree/release/Sources/epoch_server_core/compile/epoch_hive/fn_server_hiveSETEX.sqf
 */
 params ["_prefix","_key","_expires","_value"];
-"epochserver" callExtension ([121,([_prefix,_key] joinString ":"),_expires,"",_value] joinString "|")
+"epochserver" callExtension format["121|%1:%2|%3||%4",_prefix,_key,_expires,_value];

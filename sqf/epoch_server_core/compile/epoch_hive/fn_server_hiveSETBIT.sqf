@@ -12,5 +12,5 @@
     Github:
     https://github.com/EpochModTeam/Epoch/tree/release/Sources/epoch_server_core/compile/epoch_hive/fn_server_hiveSETBIT.sqf
 */
-params ["_prefix","_key","_bitIndex","_value"];
-"epochserver" callExtension format["141|%1:%2|%3|%4", _prefix, _key, _bitIndex, _value];
+//params ["_prefix","_key","_bitIndex","_value"];
+"epochserver" callExtension format (["141|%1:%2|%3|%4"] + _this);

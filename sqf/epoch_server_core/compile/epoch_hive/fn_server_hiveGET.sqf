@@ -16,26 +16,32 @@
 private ["_hiveResponse","_hiveStatus","_hiveMessage"];
 params ["_prefix","_key"];
 
-_hiveStatus = -1;
-_hiveMessage = "";
+//input will be overwritten
+private _input = format["200|%1:%2#%3", _prefix, _key, EPOCH_REALLYLONGDATABASESTRING];
+_hiveResponse = "epochserver" callExtension _input;
 
-while {_hiveStatus < 0 || _hiveStatus == 2} do {
-	_hiveResponse = "epochserver" callExtension format ["200|%1:%2", _prefix, _key];
-	_hiveStatus = 0;
-	if (_hiveResponse != "") then {
-		_hiveResponse = call compile _hiveResponse;
-        _hiveResponse params [
-            ["_status", 0],
-            ["_data", ""]
-        ];
-		_hiveStatus = _status;
-		if (_hiveStatus >= 1) then {
-			_hiveMessage = _hiveMessage + _data;
-		};
-	};
+//the output is only filled with errors in this case
+if (_hiveResponse isEqualTo "") then {
+    
+    //Layout is xxxx#yyyyy where xxxx is the size of yyyyy
+
+    //find the delimeter
+    private _idx = _input find "#";
+
+    //parse the size
+    private _size = parseNumber (_input select [0, _idx - 1]);
+    
+    //select the actual output
+    _input = _input select [_idx + 1, _size];
+
+    // avoid parse if data is blank and return empty array
+    if (_input isEqualTo "") exitWith {
+        [0,[]]
+    }; 
+    
+    parseSimpleArray _input
+
+} else {
+    //something went wrong: output too large
+    [0, ["OUTPUT TOO LARGE"]]
 };
-
-// note: removed check for null in array _hiveMessage find "<null>" == -1
-_hiveMessage = if (_hiveMessage isEqualTo "") then {[]} else {parseSimpleArray _hiveMessage};
-
-[_hiveStatus, _hiveMessage]
