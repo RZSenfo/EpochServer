@@ -16,6 +16,7 @@
 #include <thread>
 
 #define SEPARATOR "|"
+#define SEPARATOR_CHAR '|'
 
 #ifdef WIN32
 extern "C" {
@@ -29,14 +30,14 @@ extern "C" {
 
 #undef bind
 
-Epochlib *EpochLibrary;
+std::shared_ptr<Epochlib> EpochLibrary;
 
-void split(const std::string &s, char delim, std::vector<std::string> &elems) {
+void split(const std::string &s, char delim, const std::shared_ptr<std::vector<std::string>>& elems) {
 	std::stringstream ss(s);
 	std::string item;
-
+    elems->reserve(5);
 	while (std::getline(ss, item, delim)) {
-		elems.emplace_back(item);
+		elems->emplace_back(item);
 	}
 }
 
@@ -99,252 +100,46 @@ std::string getProfileFolder() {
 	return profileFolder;
 }
 
-std::string join(const std::vector<std::string>& split, int index) {
+std::string join(const std::shared_ptr<std::vector<std::string>>& split, int index) {
 	std::stringstream joinedString;
 
     //fetch the only one without seperator before
     //removes n-1 checks + possibly better loop unrolling
-    auto it = split.begin() + index;
-    if (it != split.end()) {
+    auto it = split->begin() + index;
+    auto end = split->end();
+    if (it != end) {
         joinedString << *it;
         it++;
     }
 
-	for (; it != split.end(); it++) {
+	for (; it != end; it++) {
 		joinedString << SEPARATOR << *it;
 	}
 
 	return joinedString.str();
 }
 
-/*
-	Handler
-*/
-void handler000(const std::vector<std::string>& _param, std::string& output) {
-	output = EpochLibrary->getConfig();
-}
-void handler001(const std::vector<std::string>& _param, std::string&) {
-	if (_param.size() >= 2) {
-		std::thread(std::bind(&Epochlib::initPlayerCheck, EpochLibrary, atoll(_param[1].c_str()))).detach();
-	}
-}
-
-void handler110(const std::vector<std::string>& _param, std::string& output) {
-	if (_param.size() >= 4) {
-		output = EpochLibrary->set(_param[1], _param[2], join(_param, 3));
-	}
-}
-
-void handler111(const std::vector<std::string>& _param, std::string& output) {
-	if (_param.size() >= 4) {
-		std::thread(std::bind(&Epochlib::set, EpochLibrary, _param[1], _param[2], join(_param, 3))).detach();
-	}
-}
-
-void handler120(const std::vector<std::string>& _param, std::string& output) {
-	if (_param.size() >= 5) {
-		output = EpochLibrary->setex(_param[1], _param[2], _param[3], join(_param,4));
-	}
-}
-
-void handler121(const std::vector<std::string>& _param, std::string&) {
-	if (_param.size() >= 5) {
-		std::thread(std::bind(&Epochlib::setex, EpochLibrary, _param[1], _param[2], _param[3], join(_param, 4))).detach();
-	}
-}
-
-void handler130(const std::vector<std::string>& _param, std::string& output) {
-	if (_param.size() == 3) {
-		output = EpochLibrary->expire(_param[1], _param[2]);
-	}
-}
-
-void handler131(const std::vector<std::string>& _param, std::string&) {
-	if (_param.size() == 3) {
-		std::thread(std::bind(&Epochlib::expire, EpochLibrary, _param[1], _param[2])).detach();
-	}
-}
-
-void handler141(const std::vector<std::string>& _param, std::string&) {
-	if (_param.size() >= 3) {
-		std::thread(std::bind(&Epochlib::setbit, EpochLibrary, _param[1], _param[2], _param[3])).detach();
-	}
-}
-
-void handler200(const std::vector<std::string>& _param, std::string& output) {
-	if (_param.size() >= 2) {
-		output = EpochLibrary->get(join(_param, 1));
-	}
-}
-
-void handler210(const std::vector<std::string>& _param, std::string& output) {
-	if (_param.size() >= 2) {
-		output = EpochLibrary->getTtl(join(_param, 1));
-	}
-}
-
-// Get Range
-void handler220(const std::vector<std::string>& _param, std::string& output) {
-	if (_param.size() >= 4) {
-		output = EpochLibrary->getRange(_param[1], _param[2], _param[3]);
-	}
-}
-
-void handler240(const std::vector<std::string>& _param, std::string& output) {
-	if (_param.size() == 3) {
-		output = EpochLibrary->getbit(_param[1], _param[2]);
-	}
-}
-
-void handler250(const std::vector<std::string>& _param, std::string& output) {
-	if (_param.size() >= 2) {
-		output = EpochLibrary->exists(join(_param, 1));
-	}
-}
-
-void handler300(const std::vector<std::string>& _param, std::string& output) {
-	if (_param.size() >= 2) {
-		output = EpochLibrary->ttl(join(_param, 1));
-	}
-}
-
-void handler400(const std::vector<std::string>& _param, std::string& output) {
-	if (_param.size() >= 2) {
-		output = EpochLibrary->del(join(_param, 1));
-	}
-}
-
-void handler500(const std::vector<std::string>& _param, std::string& output) {
-	output = EpochLibrary->ping();
-}
-
-void handler510(const std::vector<std::string>& _param, std::string& output) {
-	output = EpochLibrary->getCurrentTime();
-}
-
-void handler600(const std::vector<std::string>& _param, std::string& output) {
-	if (_param.size() >= 2) {
-		output = EpochLibrary->lpopWithPrefix("CMD:", join(_param, 1));
-	}
-}
-
-void handler700(const std::vector<std::string>& _param, std::string& output) {
-	if (_param.size() >= 3) {
-		output = EpochLibrary->log(_param[1], join(_param, 2));
-	}
-}
-
-void handler701(const std::vector<std::string>& _param, std::string&) {
-	if (_param.size() >= 3) {
-		std::thread(std::bind(&Epochlib::log, EpochLibrary, _param[1], join(_param, 2))).detach();
-	}
-}
-
-void handler800(const std::vector<std::string>& _param, std::string& output) {
-	if (_param.size() >= 2) {
-        output = EpochLibrary->updatePublicVariable(
-            std::vector<std::string>(
-                _param.begin() + 1,
-                _param.end()
-            )
-        );
-	}
-}
-void handler801(const std::vector<std::string>& _param, std::string&) {
-	if (_param.size() >= 2) {
-		std::thread(std::bind(&Epochlib::updatePublicVariable, 
-            EpochLibrary, 
-            std::vector<std::string>(_param.begin() + 1, _param.end()))
-        ).detach();
-	}
-}
-
-void handler810(const std::vector<std::string>& _param, std::string& output) {
-	if (_param.size() == 1) {
-		output = EpochLibrary->getRandomString(atoi(_param[1].c_str()));
-	}
-	else if(_param.size() == 0) {
-		output = EpochLibrary->getRandomString(1);
-	}
-}
-
-void handler820(const std::vector<std::string>& _param, std::string& output) {
-	if (_param.size() >= 3) {
-		output = EpochLibrary->addBan(atoll(_param[1].c_str()), join(_param, 2));
-	}
-}
-void handler821(const std::vector<std::string>& _param, std::string&) {
-	if (_param.size() >= 3) {
-		std::thread(std::bind(&Epochlib::addBan, EpochLibrary, atoll(_param[1].c_str()), join(_param, 2))).detach();
-	}
-}
-
-void handler830(const std::vector<std::string>& _param, std::string& output) {
-	output = EpochLibrary->increaseBancount();
-}
-
-void handler840(const std::vector<std::string>& _param, std::string& output) {
-	if (_param.size() >= 1) {
-		output = EpochLibrary->getStringMd5(std::vector<std::string>(_param.begin()+1,_param.end()));
-	}
-}
-
-// Battleye Integration
-
-// say  (Message)
-void handler901(const std::vector<std::string>& _param, std::string&) {
-    if (_param.size() > 1) {
-    	std::thread(std::bind(&Epochlib::beBroadcastMessage, EpochLibrary, _param[1])).detach();
-	}
-}
-
-// kick (playerUID, Message)
-void handler911(const std::vector<std::string>& _param, std::string&) {
-    if (_param.size() > 2) {
-    	std::thread(std::bind(&Epochlib::beKick, EpochLibrary, _param[1], _param[2])).detach();
-	}
-}
-
-// ban  (playerUID, Message, Duration)
-void handler921(const std::vector<std::string>& _param, std::string&) {
-    if (_param.size() > 3) {
-        std::thread (std::bind(&Epochlib::beBan, EpochLibrary, _param[1], _param[2], _param[3])).detach();
-	}
-}
-
-// lock
-void handler931(const std::vector<std::string>& _param, std::string&) {
-	std::thread(std::bind(&Epochlib::beLock, EpochLibrary)).detach();
-}
-
-// unlock
-void handler930(const std::vector<std::string>& _param, std::string&) {
-	std::thread(std::bind(&Epochlib::beUnlock, EpochLibrary)).detach();
-}
-
-// shutdown
-void handler991(const std::vector<std::string>& _param, std::string&) {
-	std::thread(std::bind(&Epochlib::beShutdown, EpochLibrary)).detach();
-}
-
-
-#ifdef EPOCHLIB_TEST
-std::string handlerT100(std::vector<std::string> _param) {
-	return EpochLibrary->getServerMD5();
-}
-#endif
 
 /*
 	RVExtension (Extension main call)
 */
 #ifdef WIN32
-void __stdcall RVExtension(char *_output, int _outputSize, const char *_function) {
+void __stdcall RVExtension(char *_output, int _outputSize, char *_function) {
 #elif __linux__
-void RVExtension(char *_output, int _outputSize, const char *_function) {
+void RVExtension(char *_output, int _outputSize, char *_function) {
 #endif
-    std::vector<std::string> rawCmd; 
-    split(std::string(_function), SEPARATOR[0], rawCmd);
+    
+    std::string infunc(_function);
+    auto longStringDelim = infunc.find('#');
+    if (longStringDelim != std::string::npos) {
+        infunc = infunc.substr(0, longStringDelim);
+    }
+
+    std::shared_ptr<std::vector<std::string>> rawCmd = std::make_shared<std::vector<std::string>>(); 
+    split(_function, SEPARATOR_CHAR, rawCmd);
 	std::string hiveOutput = "";
+
+    bool assignToInput = false;
 
 	if (EpochLibrary == NULL) {
 		std::string configPath;
@@ -363,12 +158,12 @@ void RVExtension(char *_output, int _outputSize, const char *_function) {
 		configPath = "@epochhive";
 #endif
 
-		EpochLibrary = new Epochlib(configPath, getProfileFolder(), _outputSize);
+		EpochLibrary = std::make_shared<Epochlib>(configPath, getProfileFolder(), _outputSize);
 	}
 
-	if (rawCmd.size() > 0) {
+	if (rawCmd->size() > 0) {
 		
-        std::string &callType = rawCmd[0];
+        std::string &callType = rawCmd->at(0);
         
         if (callType.size() == 3) {
 
@@ -381,11 +176,18 @@ void RVExtension(char *_output, int _outputSize, const char *_function) {
                 //SETUP
                 if (asyncFlag == '0') {
                     //get config
-                    handler000(rawCmd, hiveOutput);
+                    hiveOutput = EpochLibrary->getConfig();
                 }
                 else {
                     //initial player check
-                    handler001(rawCmd, hiveOutput);
+                    if (rawCmd->size() >= 2) {
+                        std::thread(
+                        [rawCmd]() {
+                            EpochLibrary->initPlayerCheck(
+                                std::stoll(rawCmd->at(0))
+                            );
+                        }).detach();
+                    }
                 }
                 break;
             }
@@ -395,36 +197,72 @@ void RVExtension(char *_output, int _outputSize, const char *_function) {
                 case '1': {
                     //SET
                     if (asyncFlag == '0') {
-                        handler110(rawCmd, hiveOutput);
+                        if (rawCmd->size() >= 4) {
+                            hiveOutput = EpochLibrary->db->set(rawCmd->at(1), rawCmd->at(2), join(rawCmd, 3));
+                        }
                     }
                     else {
-                        handler111(rawCmd, hiveOutput);
+                        if (rawCmd->size() >= 4) {
+                            std::thread([rawCmd]() {
+                                EpochLibrary->db->set(rawCmd->at(1), rawCmd->at(2), join(rawCmd, 3)); 
+                            }).detach();
+                        }
                     };
                     break;
                 }
                 case '2': {
                     //SETEX
                     if (asyncFlag == '0') {
-                        handler120(rawCmd, hiveOutput);
+                        if (rawCmd->size() >= 5) {
+                            hiveOutput = EpochLibrary->db->setex(
+                                rawCmd->at(1), 
+                                rawCmd->at(2), 
+                                rawCmd->at(3), 
+                                join(rawCmd, 4)
+                            );
+                        }
                     }
                     else {
-                        handler121(rawCmd, hiveOutput);
+                        if (rawCmd->size() >= 5) {
+                            std::thread(
+                                [rawCmd]() {
+                                    EpochLibrary->db->setex(
+                                        rawCmd->at(1),
+                                        rawCmd->at(2), 
+                                        rawCmd->at(3), 
+                                        join(rawCmd, 4)
+                                    );
+                                }
+                            ).detach();
+                        }
                     };
                     break;
                 }
                 case '3': {
                     //EXPIRE
                     if (asyncFlag == '0') {
-                        handler130(rawCmd, hiveOutput);
+                        if (rawCmd->size() >= 3) {
+                            hiveOutput = EpochLibrary->db->expire(rawCmd->at(1), rawCmd->at(2));
+                        }
                     }
                     else {
-                        handler131(rawCmd, hiveOutput);
+                        if (rawCmd->size() == 3) {
+                            std::thread(
+                                [rawCmd]() {
+                                    EpochLibrary->db->expire(rawCmd->at(1), rawCmd->at(2));
+                                }
+                            ).detach();
+                        }
                     };
                     break;
                 }
                 case '4': {
                     //SETBIT
-                    handler141(rawCmd, hiveOutput);
+                    if (rawCmd->size() >= 3) {
+                        std::thread([rawCmd]() {
+                            EpochLibrary->db->setbit(rawCmd->at(1), rawCmd->at(2), rawCmd->at(3));
+                        }).detach();
+                    }
                     break;
                 }
                 }
@@ -435,19 +273,40 @@ void RVExtension(char *_output, int _outputSize, const char *_function) {
                 //GET   
                 switch (functionType) {
                 case '0': {
-                    handler200(rawCmd, hiveOutput);
+                    //GET
+                    assignToInput = true;
+                    if (rawCmd->size() >= 2) {
+                        hiveOutput = EpochLibrary->db->get(join(rawCmd, 1));
+                    }
                     break;
                 }
                 case '1': {
-                    handler210(rawCmd, hiveOutput);
+                    //GET TTL
+                    if (rawCmd->size() >= 2) {
+                        hiveOutput = EpochLibrary->db->getTtl(join(rawCmd, 1));
+                    }
                     break;
                 }
                 case '2': {
-                    handler220(rawCmd, hiveOutput);
+                    //GET RANGE
+                    assignToInput = true;
+                    if (rawCmd->size() >= 4) {
+                        hiveOutput = EpochLibrary->db->getRange(rawCmd->at(1), rawCmd->at(2), rawCmd->at(3));
+                    }
                     break;
                 }
                 case '4': {
-                    handler240(rawCmd, hiveOutput);
+                    //GET BIT
+                    if (rawCmd->size() == 3) {
+                        hiveOutput = EpochLibrary->db->getbit(rawCmd->at(1), rawCmd->at(2));
+                    }
+                    break;
+                }
+                case '5': {
+                    //EXISTS
+                    if (rawCmd->size() >= 2) {
+                        hiveOutput = EpochLibrary->db->exists(join(rawCmd, 1));
+                    }
                     break;
                 }
                 }
@@ -455,38 +314,50 @@ void RVExtension(char *_output, int _outputSize, const char *_function) {
             }
             case '3': {
                 //TTL
-                handler300(rawCmd, hiveOutput);
+                if (rawCmd->size() >= 2) {
+                    hiveOutput = EpochLibrary->db->ttl(join(rawCmd, 1));
+                }
                 break;
             }
             case '4': {
-                //TTL
-                handler400(rawCmd, hiveOutput);
+                //DEL
+                if (rawCmd->size() >= 2) {
+                    hiveOutput = EpochLibrary->db->del(join(rawCmd, 1));
+                }
                 break;
             }
             case '5': {
                 //UTIL
                 if (functionType == '0') {
-                    handler500(rawCmd, hiveOutput);
+                    hiveOutput = EpochLibrary->db->ping();
                 }
                 else {
-                    handler510(rawCmd, hiveOutput);
+                    hiveOutput = EpochLibrary->getCurrentTime();
                 }
                 break;
             }
             case '6': {
                 //ARRAY
-                handler600(rawCmd, hiveOutput);
+                if (rawCmd->size() >= 2) {
+                    hiveOutput = EpochLibrary->db->lpopWithPrefix("CMD:", join(rawCmd, 1));
+                }
                 break;
             }
             case '7': {
                 //LOGGING
                 if (asyncFlag == '0') {
                     //sync
-                    handler700(rawCmd, hiveOutput);
+                    if (rawCmd->size() >= 3) {
+                        hiveOutput = EpochLibrary->db->log(rawCmd->at(1), join(rawCmd, 2));
+                    }
                 }
                 else {
                     // Async
-                    handler701(rawCmd, hiveOutput);
+                    if (rawCmd->size() >= 3) {
+                        std::thread([rawCmd]() {
+                            EpochLibrary->db->log(rawCmd->at(1), join(rawCmd, 2));
+                        }).detach();
+                    }
                 }
                 break;
             }
@@ -495,32 +366,62 @@ void RVExtension(char *_output, int _outputSize, const char *_function) {
                 switch (functionType) {
                 case '0': {
                     if (asyncFlag == '0') {
-                        handler800(rawCmd, hiveOutput);
+                        if (rawCmd->size() >= 2) {
+                            rawCmd->erase(rawCmd->begin());
+                            hiveOutput = EpochLibrary->updatePublicVariable(
+                                *rawCmd
+                            );
+                        }
                     }
                     else {
-                        handler801(rawCmd, hiveOutput);
+                        if (rawCmd->size() >= 2) {
+                            std::thread([rawCmd]() {
+                                rawCmd->erase(rawCmd->begin());
+                                EpochLibrary->updatePublicVariable(*rawCmd);
+                            }).detach();
+                        }
                     }
                     break;
                 }
                 case '1': {
-                    handler810(rawCmd, hiveOutput);
+                    if (rawCmd->size() == 2) {
+                        hiveOutput = EpochLibrary->getRandomString(std::stoi(rawCmd->at(1)));
+                    }
+                    else if (rawCmd->size() == 1) {
+                        hiveOutput = EpochLibrary->getRandomString(1);
+                    }
                     break;
                 }
                 case '2': {
                     if (asyncFlag == '0') {
-                        handler820(rawCmd, hiveOutput);
+                        if (rawCmd->size() >= 3) {
+                            hiveOutput = EpochLibrary->addBan(
+                                std::stoll(rawCmd->at(1)), 
+                                join(rawCmd, 2)
+                            );
+                        }
                     }
                     else {
-                        handler821(rawCmd, hiveOutput);
+                        if (rawCmd->size() >= 3) {
+                            std::thread([rawCmd]() {
+                                EpochLibrary->addBan(
+                                    std::stoll(rawCmd->at(1)),
+                                    join(rawCmd, 2)
+                                ); 
+                            }).detach();
+                        }
                     }
                     break;
                 }
                 case '3': {
-                    handler830(rawCmd, hiveOutput);
+                    hiveOutput = EpochLibrary->db->increaseBancount();
                     break;
                 }
                 case '4': { // string to md5
-                    handler840(rawCmd, hiveOutput);
+                    if (rawCmd->size() >= 1) {
+                        rawCmd->erase(rawCmd->begin());
+                        hiveOutput = EpochLibrary->getStringMd5(*rawCmd);
+                    }
                     break;
                 }
                 }
@@ -530,31 +431,50 @@ void RVExtension(char *_output, int _outputSize, const char *_function) {
                 //BATTLEYE
                 switch (functionType) {
                 case '0': { // say  (Message)
-                    handler901(rawCmd, hiveOutput);
+                    if (rawCmd->size() > 1) {
+                        std::thread([rawCmd]() {
+                            EpochLibrary->beBroadcastMessage(rawCmd->at(1)); 
+                        }).detach();
+                    }
                     break;
                 }
                 case '1': { // kick (playerUID, Message)
-                    handler911(rawCmd, hiveOutput);
+                    if (rawCmd->size() > 2) {
+                        std::thread([rawCmd]() {
+                            EpochLibrary->beKick(rawCmd->at(1), rawCmd->at(2)); 
+                        }).detach();
+                    }
                     break;
                 }
                 case '2': { // ban  (playerUID, Message, Duration)
-                    handler921(rawCmd, hiveOutput);
+                    if (rawCmd->size() > 3) {
+                        std::thread([rawCmd]() {
+                            EpochLibrary->beBan(rawCmd->at(1), rawCmd->at(2), rawCmd->at(3));
+                        }).detach();
+                    }
                     break;
                 }
                 case '3': {
                     if (asyncFlag == '0') {
                         // Unlock
-                        handler930(rawCmd, hiveOutput);
+                        std::thread([](){
+                            EpochLibrary->beUnlock();
+                        }).detach();
                     }
                     else {
                         // Lock Server
-                        handler931(rawCmd, hiveOutput);
+                        std::thread([](){ 
+                            EpochLibrary->beLock(); 
+                        }).detach();
                     }
                     break;
                 }
                 case '9': {
                     // shutdown
-                    handler991(rawCmd, hiveOutput);
+                    std::thread(
+                    []() { 
+                        EpochLibrary->beShutdown(); 
+                    }).detach();
                     break;
                 }
                 }
@@ -562,25 +482,46 @@ void RVExtension(char *_output, int _outputSize, const char *_function) {
             }
 #ifdef EPOCHLIB_TEST
             case 'T': {
-                handlerT100(rawCmd, hiveOutput);
+                hiveOutput = EpochLibrary->getServerMD5();
             }
 #endif
             default: {
-                hiveOutput = "Unkown command " + rawCmd[0];
+                hiveOutput = "Unkown command " + rawCmd->at(0);
                 //std::string OStext = std::to_string(_outputSize);
-                //hiveOutput = "Unkown command " + rawCmd[0] + " Max Output " + OStext;
+                //hiveOutput = "Unkown command " + rawCmd[0] + " Max hiveOutput " + OStext;
             }
             }
         }
         else {
-            hiveOutput = "Unkown command " + rawCmd[0];
+            hiveOutput = "Unkown command " + rawCmd->at(0);
         }
 	}
 	else {
 		hiveOutput = "0.6.0.0";
 	}
 
-	strncpy(_output, hiveOutput.c_str(), _outputSize);
+    if (assignToInput) {
+
+        if (hiveOutput.size() > 999500) {
+            strncpy(_output, "[0,\"OUTPUT TOO LARGE\"]", _outputSize);
+        }
+        else {
+            
+            //get msg size and push it infront
+            std::string size = std::to_string(hiveOutput.size());
+            hiveOutput = size + "#" + hiveOutput;
+
+            //overwrite input
+            strncpy(_function, hiveOutput.c_str(), _outputSize);
+
+            //output is empty by default
+            //it signals that everthing is ok
+        }
+
+    }
+    else {
+	    strncpy(_output, hiveOutput.c_str(), _outputSize);
+    }
 
 	#ifdef __linux__
 		_output[_outputSize - 1] = '\0';
