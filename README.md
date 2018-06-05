@@ -17,7 +17,7 @@ Developers
 ---------------------------
 Install Notes
 ---------------------------
-Hive DLL requires vs2013 redist: http://www.microsoft.com/en-us/download/details.aspx?id=40784
+Hive DLL requires vs2017 redist on windows
 
 ---------------------------
 Resources
@@ -27,30 +27,33 @@ Resources
 * HappyHttp - http://scumways.com/happyhttp/happyhttp.html
 * rapidjson - https://github.com/miloyip/rapidjson/
 * pcre-win - http://www.airesoft.co.uk/pcre
+* vcpkg - https://github.com/Microsoft/vcpkg
+* hiredis (for windows) - https://github.com/Microsoft/hiredis
+* libmysql (mysql c connector) - https://dev.mysql.com/downloads/connector/c/
 
 
 How to build on Linux
 --------------------------------
 
-apt-get install build-essential git libhiredis-dev libpcre3-dev
-
-git clone https://github.com/EpochModTeam/EpochServer.git\
-
-git submodule update --init
-
-cd EpochServer/
-
-make install
+SOON(TM)
 
 How to build DLL (Visual Studio)
 --------------------------------
 
-1. `git submodule update --init`
-2. Download latest PCRE version from [Airesoft](http://www.airesoft.co.uk/pcre) and extract the content in `/Assets/EpochServer/deps/pcre-win`
-2. Open `RedisServer.sln` in `/Assets/EpochServer/deps/redis/msvs`
-3. Compile all Projects with the same config (x32|x64 Debug|Release) as EpochServer
-4. After the RedisServer dependency is successfully compiled open `EpochServer.sln` in `/Assets/EpochServer/msvs`
-5. Compile
+IMPORTANT: On Windows libmysql only supports 64bit builds. If you need 32 bit, you need to build and link it yourself.
+
+Also: Hiredis needed some changes to fix linker issues, so only use the shipped version.
+
+0. Clone the repo
+1. Acquire requirements (static libs) from vcpkg
+* Install vcpkg
+* vcpkg.exe install pcre:x64-windows-static rapidjson:x64-windows-static libmysql:x64-windows-static
+2. Open `hiredis_win.sln` in `/deps/hiredis/msvs/vs-solutions/vs2015`
+3. Compile all Projects with the same config (x32|x64 Debug|Release) as EpochServer (or just all of them)
+4. After the dependencies are successfully compiled create a folder called `proj64` inside the repo root and switch into it
+5. Open up a terminal/cmd inside that folder and run `cmake .. -G "Visual Studio 15 2017 Win64" "-DCMAKE_TOOLCHAIN_FILE=F:\vcpkg\scripts\buildsystems\vcpkg.cmake" "-DVCPKG_TARGET_TRIPLET=x64-windows-static"` (For 32 bit builds change 64 to 86 respectively)
+6. The epochserver.sln should have been created otherwise fix all error.
+7. open up the epochserver.sln and compile everything
 
 Call summary
 ------------
@@ -77,11 +80,11 @@ Syntax: [Group][Operator][Flag]
 	* 4 (Redis call SETBIT)
 		* 1 (Asyncron)
 * 2 (Getter)
-	* 0 (Redis call GET)
+	* 0 (Redis call GET) - Overwrites input - must be large enough (i.e. 100k chars)
 		* 0 (Syncron)
-	* 1 (Redis call GET + TTL)
+	* 1 (Redis call GET + TTL) - Overwrites input - must be large enough (i.e. 100k chars)
 		* 0 (Syncron)
-	* 2 (Redis call GETRANGE)
+	* 2 (Redis call GETRANGE) - Overwrites input - must be large enough (i.e. 100k chars)
 		* 0 (Syncron)		
 	* 4 (Redis call GETBIT)
 		* 0 (Syncron)
@@ -132,10 +135,19 @@ EpochServer.ini Guide
 	* `BattlEyePath` This is the path to the battleye folder which is needed for the AntiHack [default: "PROFILEPATH/battleye"]
 	* `InstanceID` Current server instance for the database [default: "NA123"]
 	* `LogAbuse` Enables abuse logging [default: 0, 0: none, 1: redis key, 2: redis key & value]
+* `[Database]`
+	* `Type` Redis or MySQL [default: Redis]
 * `[Redis]`
 	* `IP` Redis server ip/hostname [default: 127.0.0.1]
 	* `Port` Redis server port 0-65535 [default: 6379]
 	* `DB` Database index [default: 0]
+	* `User` Database User [default: empty] (not needed)
+	* `Password` Password [default: `<no password>`]
+* `[MySQL]`
+	* `IP` MySQL server ip/hostname [default: 127.0.0.1]
+	* `Port` MySQL server port 0-65535 [default: 3306]
+	* `DB` Database index [default: epoch]
+	* `User` Database User [defualt: root]
 	* `Password` Password [default: `<no password>`]
 * `[SteamAPI]`
 	* `Logging` Enable logging for SteamAPI [default: 0, 0: disabled, 1: ban reason, 2: info/debug]
