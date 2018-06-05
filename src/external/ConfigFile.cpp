@@ -55,7 +55,7 @@ ConfigFile::ConfigFile(std::string const& configFile) {
 	std::string name;
 	std::string value;
 	std::string inSection;
-	int posEqual;
+	size_t posEqual;
 	while (safeGetline(file, line)) {
 
 		if (!line.length()) continue;
