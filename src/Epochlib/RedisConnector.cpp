@@ -17,23 +17,48 @@
 #endif
 
 
-RedisConnector::RedisConnector(EpochlibConfigRedis _config) {
-	this->config = _config;
+RedisConnector::RedisConnector() {
 	this->context = NULL;
-
-	this->_reconnect(false);
 }
+
 RedisConnector::~RedisConnector() {
 	if (this->context != NULL) {
 		redisFree(this->context);
 	}
 }
 
-EpochlibRedisExecute RedisConnector::execute(const char *format, ...) {
+bool RedisConnector::init(EpochlibConfigDB _config) {
+
+    this->config = _config;
+
+    // Setup regex validation
+    const char *error;
+    int erroffset;
+    std::stringstream regexString;
+    regexString << "(?(DEFINE)";
+    regexString << "(?<boolean>true|false)";
+    regexString << "(?<number>-?(?=[1-9]|0(?!\\d))\\d+(\\.\\d+)?([eE][+\\-]?\\d+)?)";
+    regexString << "(?<string>\"([^\"]*|\\\\\\\\[\"\\\\\\\\bfnrt\\/]|\\\\u[0-9a-f]{4})*\")";
+    regexString << "(?<array>\\[(?:(?&container)(?:,(?&container))*)?\\s*\\])";
+    regexString << "(?<container>\\s*(?:(?&boolean)|(?&number)|(?&string)|(?&array))\\s*)";
+    regexString << ")";
+    regexString << "\\A(?&array)\\Z";
+    this->setValueRegex = pcre_compile(regexString.str().c_str(), PCRE_CASELESS | PCRE_DOTALL | PCRE_EXTENDED, &error, &erroffset, NULL);
+    if (this->setValueRegex == NULL) {
+        this->config.logger->log("PCRE compile error: " + std::string(error, erroffset));
+        return false;
+    }
+
+    this->_reconnect(false);
+
+    return true;
+}
+
+EpochlibDBExecute RedisConnector::execute(const char *format, ...) {
 	this->_reconnect(0);
 
 	va_list ap;
-	EpochlibRedisExecute returnObj;
+	EpochlibDBExecute returnObj;
 	redisReply *reply = NULL;
 
 	while (reply == NULL) {
@@ -113,11 +138,12 @@ void RedisConnector::_reconnect(bool _force) {
 		}
 
 		/* Database index given -> change database */
-		if (this->config.dbIndex > 0) {
+        int dbIndex = std::stoi(this->config.dbIndex);
+		if (dbIndex > 0) {
 			redisReply *selectReply = NULL;
 
 			while (selectReply == NULL) {
-				selectReply = (redisReply *)redisCommand(this->context, "SELECT %d", this->config.dbIndex);
+				selectReply = (redisReply *)redisCommand(this->context, "SELECT %d", dbIndex);
 			}
 			if (selectReply->type == REDIS_REPLY_STRING) {
 				if (strcmp(selectReply->str, "OK") == 0) {
@@ -131,4 +157,182 @@ void RedisConnector::_reconnect(bool _force) {
 
 	// Unlock
 	this->contextMutex.unlock();
+}
+
+std::string RedisConnector::getRange(const std::string& _key, const std::string& _value, const std::string& _value2) {
+    SQF returnSqf;
+    EpochlibDBExecute value = this->execute("GETRANGE %s %s %s", _key.c_str(), _value.c_str(), _value2.c_str());
+    if (value.success == 1) {
+        returnSqf.push_number(SQF_RETURN_STATUS::SUCCESS);
+        std::string output = value.message;
+        std::stringstream outputSteam;
+        for (std::string::iterator it = output.begin(); it != output.end(); ++it) {
+            if (*it == '\'') {
+                outputSteam << '\'';
+            }
+            outputSteam << *it;
+        }
+        returnSqf.push_str(outputSteam.str().c_str(), 1);
+    }
+    else {
+        returnSqf.push_number(SQF_RETURN_STATUS::FAIL);
+    }
+    return returnSqf.toArray();
+}
+
+std::string RedisConnector::get(const std::string& _key) {
+
+    SQF returnSqf;
+
+    auto temp = this->execute("GET %s", _key.c_str());
+    
+    // GET success proceed
+    if (temp.success == 1) {
+        
+        returnSqf.push_number(SQF_RETURN_STATUS::SUCCESS); // single row
+
+        std::string output = temp.message;
+        
+        std::stringstream outputSteam;
+        for (std::string::iterator it = output.begin(); it != output.end(); ++it) {
+            if (*it == '\'') {
+                outputSteam << '\'';
+            }
+            outputSteam << *it;
+        }
+
+        auto result = outputSteam.str();
+        if (!result.empty() && result[0] == '[') {
+            returnSqf.push_array(result.c_str());
+        }
+        else {
+            returnSqf.push_str(result.c_str(), 1);
+        }
+
+    }
+    else {
+        returnSqf.push_number(SQF_RETURN_STATUS::FAIL);
+    }
+
+    return returnSqf.toArray();
+}
+
+std::string RedisConnector::getTtl(const std::string& _key) {
+    SQF returnSqf;
+
+    // No temp GET found -> GET new one
+    auto temp = this->execute("GET %s", _key.c_str());
+
+    if (temp.success == 1) {
+
+        EpochlibDBExecute ttl = this->execute("TTL %s", _key.c_str());
+
+        size_t messageSize = 0;
+
+        returnSqf.push_number(SQF_RETURN_STATUS::SUCCESS); // single row
+
+
+        if (ttl.success == 1) {
+            returnSqf.push_number(std::atol(ttl.message.c_str()));
+        }
+        else {
+            returnSqf.push_number(-1);
+        }
+
+        std::string output = temp.message;
+        std::stringstream outputSteam;
+        for (std::string::iterator it = output.begin(); it != output.end(); ++it) {
+            if (*it == '\'') {
+                outputSteam << '\'';
+            }
+            outputSteam << *it;
+        }
+        returnSqf.push_str(outputSteam.str().c_str(), 1);
+
+        return returnSqf.toArray();
+    }
+    else {
+        return SQF::RET_FAIL();
+    }
+    
+}
+
+std::string RedisConnector::set(const std::string& _key, const std::string& _value, const std::string& _value2) {
+    // _value not used atm	
+    int regexReturnCode = pcre_exec(this->setValueRegex, NULL, _value2.c_str(), _value2.length(), 0, 0, NULL, NULL);
+    if (regexReturnCode == 0) {
+        return this->_DBExecToSQF(this->execute("SET %s %s", _key.c_str(), _value2.c_str()), SQF_RETURN_TYPE::NOTHING).toArray();
+    }
+    else {
+
+        if (this->config.logAbuse > 0) {
+            this->config.logger->log("[Abuse] SETEX key " + _key + " does not match the allowed syntax!" + (this->config.logAbuse > 1 ? "\n" + _value2 : ""));
+        }
+
+        return SQF::RET_FAIL();
+    }
+}
+
+std::string RedisConnector::setex(const std::string& _key, const std::string& _ttl, const std::string& _value2, const std::string& _value3) {
+    // _value2 not used atm
+    int regexReturnCode = pcre_exec(this->setValueRegex, NULL, _value3.c_str(), _value3.length(), 0, 0, NULL, NULL);
+    if (regexReturnCode == 0) {
+        return this->_DBExecToSQF(this->execute("SETEX %s %s %s", _key.c_str(), _ttl.c_str(), _value3.c_str()), SQF_RETURN_TYPE::NOTHING).toArray();
+    }
+    else {
+        if (this->config.logAbuse > 0) {
+            this->config.logger->log("[Abuse] SETEX key " + _key + " does not match the allowed syntax!" + (this->config.logAbuse > 1 ? "\n" + _value3 : ""));
+        }
+
+        return SQF::RET_FAIL();
+    }
+}
+
+std::string RedisConnector::expire(const std::string& _key, const std::string& _ttl) {
+    return this->_DBExecToSQF(this->execute("EXPIRE %s %s", _key.c_str(), _ttl.c_str()), SQF_RETURN_TYPE::NOTHING).toArray();
+}
+
+std::string RedisConnector::setbit(const std::string& _key, const std::string& _value, const std::string& _value2) {
+    return this->_DBExecToSQF(this->execute("SETBIT %s %s %s", _key.c_str(), _value.c_str(), _value2.c_str()), SQF_RETURN_TYPE::NOTHING).toArray();
+}
+
+std::string RedisConnector::getbit(const std::string& _key, const std::string& _value) {
+    return this->_DBExecToSQF(this->execute("GETBIT %s %s", _key.c_str(), _value.c_str()), SQF_RETURN_TYPE::NOTHING).toArray();
+}
+
+std::string RedisConnector::exists(const std::string& _key) {
+    return this->_DBExecToSQF(this->execute("EXISTS %s", _key.c_str()), SQF_RETURN_TYPE::STRING).toArray();
+}
+
+std::string RedisConnector::del(const std::string& _key) {
+    return this->_DBExecToSQF(this->execute("DEL %s", _key.c_str()), SQF_RETURN_TYPE::NOTHING).toArray();
+}
+
+std::string RedisConnector::ping() {
+    return this->_DBExecToSQF(this->execute("PING"), SQF_RETURN_TYPE::NOTHING).toArray();
+}
+
+std::string RedisConnector::lpopWithPrefix(const std::string& _prefix, const std::string& _key) {
+    return this->_DBExecToSQF(this->execute("LPOP %s%s", _prefix.c_str(), _key.c_str()), SQF_RETURN_TYPE::STRING).toArray();
+}
+
+std::string RedisConnector::ttl(const std::string& _key) {
+    return this->_DBExecToSQF(this->execute("TTL %s", _key.c_str()), SQF_RETURN_TYPE::STRING).toArray();
+}
+
+std::string RedisConnector::log(const std::string& _key, const std::string& _value) {
+    char formatedTime[64];
+    time_t t = time(0);
+    struct tm * currentTime = localtime(&t);
+
+    strftime(formatedTime, 64, "%Y-%m-%d %H:%M:%S ", currentTime);
+
+    this->execute("LPUSH %s-LOG %s%s", _key.c_str(), formatedTime, _value.c_str());
+
+    return this->_DBExecToSQF(this->execute("LTRIM %s-LOG 0 %d", _key.c_str(), this->config.logLimit), SQF_RETURN_TYPE::NOTHING).toArray();
+}
+
+
+std::string RedisConnector::increaseBancount() {
+    return this->_DBExecToSQF(this->execute("INCR %s", "ahb-cnt"), SQF_RETURN_TYPE::STRING).toArray();
 }

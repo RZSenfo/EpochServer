@@ -4,21 +4,36 @@
 
 #include <cstdlib>
 #include <ctime>
+#include <cctype>
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
 #include <fstream>
 
+bool iequals(const std::string& string1, const std::string& string2) {
+    return  string1.size() == string2.size()
+        &&
+        std::equal(
+            string1.begin(),
+            string1.end(),
+            string2.begin(),
+            [](const char& c1, const char& c2) {
+        return (c1 == c2 || std::toupper(c1) == std::toupper(c2));
+    });
+}
+
 Epochlib::Epochlib(std::string _configPath, std::string _profilePath, int _outputSize) {
-	this->initialized = false;
-	this->config.hivePath.assign(_configPath);
-	this->config.profilePath.assign(_profilePath);
+	
+    this->initialized = false;
+	
+    this->config.hivePath = _configPath;
+	this->config.profilePath = _profilePath;
 	this->config.outputSize = _outputSize;
 
 	// Init random
 	std::srand(std::time(0));
 
-	this->logger = new Logger(this->config.profilePath + "/EpochServer.log");
+	this->logger = std::make_shared<Logger>(this->config.profilePath + "/EpochServer.log");
 
 #ifndef EPOCHLIB_TEST
 #ifndef EPOCHLIB_DISABLE_OFFICALCHECK
@@ -30,40 +45,41 @@ Epochlib::Epochlib(std::string _configPath, std::string _profilePath, int _outpu
 #endif
 #endif
 
-	if (this->_loadConfig(_configPath + "/EpochServer.ini") || this->_loadConfig(_profilePath + "/EpochServer.ini") || 
-	    this->_loadConfig(_configPath + "/epochserver.ini")) {
+    //Try config load
+	if (
+        this->_loadConfig(_configPath + "/EpochServer.ini") 
+        || 
+        this->_loadConfig(_profilePath + "/EpochServer.ini") 
+        || 
+	    this->_loadConfig(_configPath + "/epochserver.ini")
+    ) {
 		this->initialized = true;
 	}
 	else {
 		this->logger->log("EpochServer.ini not found in (" + _configPath + ", " + _profilePath + ")");
-		exit(1);
+		std::exit(1);
 	}
 
     
 #ifndef EPOCHLIB_TEST
-	this->redis = new RedisConnector(this->config.redis);
+    if (iequals(this->config.db.dbType, "Redis")) {
+        this->db = std::make_unique<RedisConnector>();
+    }
+    else if (iequals(this->config.db.dbType, "MySQL")) {
+        this->db = std::make_unique<MySQLConnector>();
+    }
+    
+    if (this->db->init(this->config.db)) {
+        this->logger->log(this->config.db.dbType + " Database connected");
+    }
+    else {
+        this->logger->log("Could not initialize Database. Check the config!");
+        std::exit(1);
+    }
+
+
 #endif
 
-	// Setup regex validation
-	const char *error;
-	int erroffset;
-	std::stringstream regexString;
-	regexString << "(?(DEFINE)";
-	regexString << "(?<boolean>true|false)";
-	regexString << "(?<number>-?(?=[1-9]|0(?!\\d))\\d+(\\.\\d+)?([eE][+\\-]?\\d+)?)";
-	regexString << "(?<string>\"([^\"]*|\\\\\\\\[\"\\\\\\\\bfnrt\\/]|\\\\u[0-9a-f]{4})*\")";
-	regexString << "(?<array>\\[(?:(?&container)(?:,(?&container))*)?\\s*\\])";
-	regexString << "(?<container>\\s*(?:(?&boolean)|(?&number)|(?&string)|(?&array))\\s*)";
-	regexString << ")";
-	regexString << "\\A(?&array)\\Z";
-	this->setValueRegex = pcre_compile(regexString.str().c_str(), PCRE_CASELESS | PCRE_DOTALL | PCRE_EXTENDED, &error, &erroffset, NULL);
-	if (this->setValueRegex == NULL){
-		this->logger->log("PCRE compile error: " + std::string(error, erroffset));
-		exit(1);
-	}
-
-	this->tempGet.success = 0;
-    
 }
 Epochlib::~Epochlib() {
 
@@ -347,10 +363,6 @@ std::string Epochlib::getRandomString(int _stringCount) {
 	}
 }
 
-std::string Epochlib::increaseBancount() {
-	return this->_redisExecToSQF(this->redis->execute("INCR %s", "ahb-cnt"), EPOCHLIB_SQF_STRING).toArray();
-}
-
 std::string Epochlib::getStringMd5(const std::vector<std::string>& _stringsToHash) {
 	SQF returnSQF;
 	
@@ -391,238 +403,9 @@ std::string Epochlib::getCurrentTime() {
 	return returnSQF.toArray();
 }
 
-
-std::string Epochlib::getRange(const std::string& _key, const std::string& _value, const std::string& _value2) {
-	SQF returnSqf;
-	EpochlibRedisExecute value = this->redis->execute("GETRANGE %s %s %s", _key.c_str(), _value.c_str(), _value2.c_str());
-	if (value.success == 1) {
-		returnSqf.push_number(EPOCHLIB_SQF_RET_SUCESS);
-		std::string output = value.message;
-		std::stringstream outputSteam;
-		for (std::string::iterator it = output.begin(); it != output.end(); ++it) {
-			if (*it == '\'') {
-				outputSteam << '\'';
-			}
-			outputSteam << *it;
-		}
-		returnSqf.push_str(outputSteam.str().c_str(), 1);
-	} else {
-		returnSqf.push_number(EPOCHLIB_SQF_RET_FAIL);
-	}
-	return returnSqf.toArray();
-}
-
-std::string Epochlib::get(const std::string& _key) {
-	SQF returnSqf;
-
-
-	// No temp GET found -> GET new one
-	if (this->tempGet.success != 1) {
-		this->tempGet = this->redis->execute("GET %s", _key.c_str());
-	}
-
-	// GET success proceed
-	if (this->tempGet.success == 1) {
-		size_t messageSize = 0;
-
-		// Temp message > possible output
-		if (this->tempGet.message.size() > this->config.outputSize) {
-			returnSqf.push_number(EPOCHLIB_SQF_RET_CONTINUE);
-
-			messageSize = this->config.outputSize - 20;
-			std::string output = this->tempGet.message.substr(0, messageSize);
-			std::stringstream outputSteam;
-			for (std::string::iterator it = output.begin(); it != output.end(); ++it) {
-				if (*it == '\'') {
-					outputSteam << '\'';
-				}
-				outputSteam << *it;
-			} 
-			returnSqf.push_str(outputSteam.str().c_str(), 1);
-		}
-		// Message in one row possible
-		else {
-			returnSqf.push_number(EPOCHLIB_SQF_RET_SUCESS); // single row
-
-			messageSize = this->tempGet.message.size();
-			std::string output = this->tempGet.message;
-			std::stringstream outputSteam;
-			for (std::string::iterator it = output.begin(); it != output.end(); ++it) {
-				if (*it == '\'') {
-					outputSteam << '\'';
-				}
-				outputSteam << *it;
-			}
-			returnSqf.push_str(outputSteam.str().c_str(), 1);
-
-			this->tempGet.success = 0;
-		}
-
-                if (this->tempGet.message.size() >= this->config.outputSize - 20)
-		    this->tempGet.message.erase(this->tempGet.message.begin(), this->tempGet.message.begin() + this->config.outputSize - 20);
-	}
-	else {
-		returnSqf.push_number(EPOCHLIB_SQF_RET_FAIL);
-	}
-
-	return returnSqf.toArray();
-}
-
-std::string Epochlib::getTtl(const std::string& _key) {
-	SQF returnSqf;
-
-	// No temp GET found -> GET new one
-	if (this->tempGet.success != 1) {
-		this->tempGet = this->redis->execute("GET %s", _key.c_str());
-
-		if (this->tempGet.success == 1) {
-			
-			EpochlibRedisExecute ttl = this->redis->execute("TTL %s", _key.c_str());
-
-			size_t messageSize = 0;
-
-			// Temp message > possible output
-			if (this->tempGet.message.size() > this->config.outputSize) {
-				returnSqf.push_number(EPOCHLIB_SQF_RET_CONTINUE);
-
-				if (ttl.success == 1) {
-					returnSqf.push_number(std::atol(ttl.message.c_str()));
-				}
-				else {
-					returnSqf.push_number(-1);
-				}
-
-				messageSize = this->config.outputSize - 20;
-				std::string output = this->tempGet.message.substr(0, messageSize);
-				std::stringstream outputSteam;
-				for (auto it = output.begin(); it != output.end(); ++it) {
-					if (*it == '\'') {
-						outputSteam << '\'';
-					}
-					outputSteam << *it;
-				}
-				returnSqf.push_str(outputSteam.str().c_str(), 1);
-			}
-			// Message in one row possible
-			else {
-				returnSqf.push_number(EPOCHLIB_SQF_RET_SUCESS); // single row
-
-				
-				if (ttl.success == 1) {
-					returnSqf.push_number(std::atol(ttl.message.c_str()));
-				}
-				else {
-					returnSqf.push_number(-1);
-				}
-
-				messageSize = this->tempGet.message.size();
-				std::string output = this->tempGet.message;
-				std::stringstream outputSteam;
-				for (std::string::iterator it = output.begin(); it != output.end(); ++it) {
-					if (*it == '\'') {
-						outputSteam << '\'';
-					}
-					outputSteam << *it;
-				}
-				returnSqf.push_str(outputSteam.str().c_str(), 1);
-
-				this->tempGet.success = 0;
-			}
-                        
-            if (this->tempGet.message.size() >= this->config.outputSize - 20)
-			    this->tempGet.message.erase(this->tempGet.message.begin(), this->tempGet.message.begin() + this->config.outputSize - 20);
-		}
-		else {
-			returnSqf.push_number(EPOCHLIB_SQF_RET_FAIL);
-		}
-	}
-	else {
-		returnSqf.push_number(EPOCHLIB_SQF_RET_FAIL);
-	}
-
-	return returnSqf.toArray();
-}
-
-std::string Epochlib::set(const std::string& _key, const std::string& _value, const std::string& _value2) {
-	// _value not used atm	
-	int regexReturnCode = pcre_exec(this->setValueRegex, NULL, _value2.c_str(), _value2.length(), 0, 0, NULL, NULL);
-	if (regexReturnCode == 0) {
-		return this->_redisExecToSQF(this->redis->execute("SET %s %s", _key.c_str(), _value2.c_str()), EPOCHLIB_SQF_NOTHING).toArray();
-	}
-	else {
-		if (this->config.logAbuse > 0) {
-			this->logger->log("[Abuse] SETEX key " + _key + " does not match the allowed syntax!" + (this->config.logAbuse > 1 ? "\n" + _value2 : ""));
-		}
-
-		SQF sqf;
-		sqf.push_number(EPOCHLIB_SQF_RET_FAIL);
-		return sqf.toArray();
-	}
-}
-
-std::string Epochlib::setex(const std::string& _key, const std::string& _ttl, const std::string& _value2, const std::string& _value3) {
-	// _value2 not used atm
-	int regexReturnCode = pcre_exec(this->setValueRegex, NULL, _value3.c_str(), _value3.length(), 0, 0, NULL, NULL);
-	if (regexReturnCode == 0) {
-		return this->_redisExecToSQF(this->redis->execute("SETEX %s %s %s", _key.c_str(), _ttl.c_str(), _value3.c_str()), EPOCHLIB_SQF_NOTHING).toArray();
-	}
-	else {
-		if (this->config.logAbuse > 0) {
-			this->logger->log("[Abuse] SETEX key " + _key + " does not match the allowed syntax!" + (this->config.logAbuse > 1 ? "\n" + _value3 : ""));
-		}
-
-		SQF sqf;
-		sqf.push_number(EPOCHLIB_SQF_RET_FAIL);
-		return sqf.toArray();
-	}
-}
-
-std::string Epochlib::expire(const std::string& _key, const std::string& _ttl) {
-	return this->_redisExecToSQF(this->redis->execute("EXPIRE %s %s", _key.c_str(), _ttl.c_str()), EPOCHLIB_SQF_NOTHING).toArray();
-}
-
-std::string Epochlib::setbit(const std::string& _key, const std::string& _value, const std::string& _value2) {
-	return this->_redisExecToSQF(this->redis->execute("SETBIT %s %s %s", _key.c_str(), _value.c_str(), _value2.c_str()), EPOCHLIB_SQF_NOTHING).toArray();
-}
-
-std::string Epochlib::getbit(const std::string& _key, const std::string& _value) {
-	return this->_redisExecToSQF(this->redis->execute("GETBIT %s %s", _key.c_str(), _value.c_str()), EPOCHLIB_SQF_STRING).toArray();
-}
-
-std::string Epochlib::exists(const std::string& _key) {
-	return this->_redisExecToSQF(this->redis->execute("EXISTS %s", _key.c_str()), EPOCHLIB_SQF_STRING).toArray();
-}
-
-std::string Epochlib::del(const std::string& _key) {
-	return this->_redisExecToSQF(this->redis->execute("DEL %s", _key.c_str()), EPOCHLIB_SQF_NOTHING).toArray();
-}
-
-std::string Epochlib::ping() {
-	return this->_redisExecToSQF(this->redis->execute("PING"), EPOCHLIB_SQF_NOTHING).toArray();
-}
-
-std::string Epochlib::lpopWithPrefix(const std::string& _prefix, const std::string& _key) {
-	return this->_redisExecToSQF(this->redis->execute("LPOP %s%s", _prefix.c_str(), _key.c_str()), EPOCHLIB_SQF_STRING).toArray();
-}
-
-std::string Epochlib::ttl(const std::string& _key) {
-	return this->_redisExecToSQF(this->redis->execute("TTL %s", _key.c_str()), EPOCHLIB_SQF_STRING).toArray();
-}
-
-std::string Epochlib::log(const std::string& _key, const std::string& _value) {
-	char formatedTime[64];
-	time_t t = time(0);
-	struct tm * currentTime = localtime(&t);
-
-	strftime(formatedTime, 64, "%Y-%m-%d %H:%M:%S ", currentTime);
-
-	this->redis->execute("LPUSH %s-LOG %s%s", _key.c_str(), formatedTime, _value.c_str());
-	return this->_redisExecToSQF(this->redis->execute("LTRIM %s-LOG 0 %d", _key.c_str(), this->config.logLimit), EPOCHLIB_SQF_NOTHING).toArray();
-}
-
 std::string Epochlib::getServerMD5() {
-	std::string serverMD5;
 
+	std::string serverMD5;
 	std::string addonPath = this->config.hivePath + "/addons/a3_epoch_server.pbo";
 	FILE *srvFile = fopen(addonPath.c_str(), "rb");
 	if (srvFile != NULL) {
@@ -664,20 +447,16 @@ std::string Epochlib::_getBattlEyeGUID(int64 _steamId) {
 	return md5.hexdigest();
 }
 
-bool Epochlib::_fileExist(std::string _filename) {
-	std::ifstream file(_filename.c_str());
+bool Epochlib::_fileExist(const std::string& _filename) {
+	
+    std::ifstream file(_filename.c_str());
+    bool exists = file.good();
+	file.close();
 
-	if (file.good()) {
-		file.close();
-		return true;
-	}
-	else {
-		file.close();
-		return false;
-	}
+	return exists;
 }
 
-bool Epochlib::_loadConfig(std::string configFilename) {
+bool Epochlib::_loadConfig(const std::string& configFilename) {
 	if (this->_fileExist(configFilename)) {
 		ConfigFile configFile(configFilename);
 
@@ -692,12 +471,15 @@ bool Epochlib::_loadConfig(std::string configFilename) {
 		this->config.battlEye.password = (std::string)configFile.Value("EpochServer", "Password", "");
 		this->config.battlEye.path  = this->config.battlEyePath;
 
-		// Redis config
-		this->config.redis.ip       = (std::string)configFile.Value("Redis", "IP", "127.0.0.1");
-		this->config.redis.port     = (unsigned short int)configFile.Value("Redis", "Port", 6379);
-		this->config.redis.password = (std::string)configFile.Value("Redis", "Password", "");
-		this->config.redis.dbIndex  = (unsigned int)configFile.Value("Redis", "DB", 0);
-		this->config.redis.logger   = this->logger;
+        //DB Config
+        auto dbType = this->config.db.dbType   = (std::string)configFile.Value("Database", "Type", "Redis");
+
+		this->config.db.ip       = (std::string)configFile.Value(dbType, "IP", "127.0.0.1");
+		this->config.db.port     = (unsigned short int)configFile.Value(dbType, "Port", dbType == "Redis" ? 6379 : 3306);
+        this->config.db.user     = (std::string)configFile.Value(dbType, "User", dbType == "Redis" ? "" : "root");
+        this->config.db.password = (std::string)configFile.Value(dbType, "Password", "");
+		this->config.db.dbIndex  = (unsigned int)configFile.Value(dbType, "DB", dbType == "Redis" ? "0" : "epoch");
+		this->config.db.logger   = this->logger;
 
 		// SteamApi
 		this->config.steamAPI.logging                = configFile.Value("SteamAPI", "Logging", 0);
@@ -712,30 +494,6 @@ bool Epochlib::_loadConfig(std::string configFilename) {
 	else {
 		return false;
 	}
-}
-
-SQF Epochlib::_redisExecToSQF(const EpochlibRedisExecute& _redisExecute, int _forceMsgOutputType) {
-	SQF returnSQF;
-
-	returnSQF.push_number(_redisExecute.success ? EPOCHLIB_SQF_RET_SUCESS : EPOCHLIB_SQF_RET_FAIL);
-	if (!_redisExecute.message.empty()) {
-		if (_redisExecute.message.at(0) == '[') {
-			returnSQF.push_array(_redisExecute.message);
-		}
-		else {
-			returnSQF.push_str(_redisExecute.message.c_str());
-		}
-	}
-	else if (_forceMsgOutputType >= 0) {
-		if (_forceMsgOutputType == EPOCHLIB_SQF_STRING) {
-			returnSQF.push_str("");
-		}
-		else if (_forceMsgOutputType == EPOCHLIB_SQF_ARRAY) {
-			returnSQF.push_array("[]");
-		}
-	}
-
-	return returnSQF;
 }
 
 bool Epochlib::_isOffialServer() {
