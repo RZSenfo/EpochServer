@@ -282,6 +282,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                 }
                 case '1': {
                     //GET TTL
+                    assignToInput = true;
                     if (rawCmd->size() >= 2) {
                         hiveOutput = EpochLibrary->db->getTtl(join(rawCmd, 1));
                     }
