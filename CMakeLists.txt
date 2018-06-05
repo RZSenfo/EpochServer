@@ -129,12 +129,25 @@ message(${PCRE_LIB})
 SET(LIBS ${LIBS} ${PCRE_LIB})
 
 # MYSQL
-#include(FindMysqlDB)
-#if(MYSQL_FOUND)
-#	include_directories(${MYSQL_INCLUDE_DIR})
-#else()
-#	message(FATAL_ERROR "\nMYSQL not found")
-#endif()
+find_path(MYSQL_INCLUDE mysql/mysql.h)
+include_directories(MYSQL_INCLUDE)
+find_library(MYSQL_LIB mysqlclient)
+link_libraries(MYSQL_LIB)
+
+find_library(EAY_LIB libeay32)
+link_libraries(EAY_LIB)
+
+find_library(SSL_LIB ssleay32)
+link_libraries(SSL_LIB)
+
+find_library(Z_LIB zlib)
+link_libraries(Z_LIB)
+
+message("MYSQL Include Path:")
+message(${MYSQL_INCLUDE})
+message("MYSQL Lib Path:")
+message(${MYSQL_LIB})
+SET(LIBS ${LIBS} ${MYSQL_LIB} ${EAY_LIB} ${SSL_LIB} ${Z_LIB})
 
 
 # -----------------------
@@ -162,11 +175,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-if(MSVC)
+if("${CMAKE_CXX_COMPILER_ID}" MATCHES "MSVC")
 	set(CMAKE_CXX_FLAGS_DEBUG_INIT          "/Zi /MT /WX- /0d /Ob0 /EHsc /GS- /Oy- /Oi /Ot /Oy /arch:SSE2 /fp:precise /DNOMINMAX /D_DEBUG /D _WINDLL /Zc:sizedDealloc-")
 	set(CMAKE_CXX_FLAGS_MINSIZEREL_INIT         "/MT /WX- /O1 /Ob0 /EHsc /GS- /Oy  /Oi /Ot /Oy /arch:SSE2 /fp:precise /DNOMINMAX /D NDEBUG /Zc:sizedDealloc-")
 	set(CMAKE_CXX_FLAGS_RELEASE_INIT            "/MT /WX- /O2 /Ob1 /EHsc /GS- /Oy  /Oi /Ot /Oy /arch:SSE2 /fp:precise /DNOMINMAX /D NDEBUG /Zc:sizedDealloc-")
 	set(CMAKE_CXX_FLAGS_RELWITHDEBINFO_INIT "/Zi /MT /Zi  /O2 /Ob1 /EHsc /GS- /Oy- /Oi /Ot /Oy /arch:SSE2 /fp:precise /DNOMINMAX /D_DEBUG /Zc:sizedDealloc-")
+	message("MSVC!")
 else()
 	set(CMAKE_CXX_FLAGS_DEBUG_INIT 			  "-march=i686 -msse2 -msse3 -shared -fPIC -m32 -O2 -fomit-frame-pointer")
 	set(CMAKE_CXX_FLAGS_MINSIZEREL_INIT       "-march=i686 -msse2 -msse3 -shared -fPIC -m32 -O2 -fomit-frame-pointer")
@@ -176,8 +190,10 @@ endif()
 
 if(${WIN32})
 	# Windows
-  	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /wd4996")
-  	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4996")
+	set(CMAKE_CXX_FLAGS_RELEASE "/MT")
+	set(CMAKE_CXX_FLAGS_DEBUG "/MTd")
+  	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /wd4996 /MT")
+  	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4996 /MT")
 	target_link_libraries(${EXECUTABLE_NAME} ${LIBS})
 	add_definitions(-DUNICODE -D_UNICODE -DWIN32_LEAN_AND_MEAN)
 	SET_TARGET_PROPERTIES(${EXECUTABLE_NAME} PROPERTIES LINK_FLAGS " /MANIFEST:NO /ERRORREPORT:NONE")
