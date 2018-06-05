@@ -1,19 +1,25 @@
-#include <string>
-#include "Logger.hpp"
-
 #ifndef __EPOCHLIB_DEF__
 #define __EPOCHLIB_DEF__
+
+#include <string>
+#include "Logger.hpp"
 
 typedef unsigned char uint8;
 typedef long long int int64;
 
-struct EpochlibConfigRedis {
-	std::string ip;
+struct EpochlibConfigDB {
+	
+    std::string dbType;
+    
+    std::string ip;
 	unsigned short int port;
     std::string user;
 	std::string password;
-	unsigned int dbIndex;
-	Logger *logger;
+	std::string dbIndex;
+	
+    std::shared_ptr<Logger> logger;
+    short int logAbuse;
+    int logLimit;
 };
 
 struct EpochlibConfigSteamAPI {
@@ -33,21 +39,25 @@ struct EpochlibConfigBattlEye {
 };
 
 struct EpochlibConfig {
-	std::string battlEyePath;
+	
+    size_t outputSize;
+	
+    std::string battlEyePath;
 	EpochlibConfigBattlEye battlEye;
-	EpochlibConfigRedis redis;
+	
+    EpochlibConfigDB db;
 	std::string hivePath;
-	std::string profilePath;
-	size_t outputSize;
+	
+    std::string profilePath;
 	EpochlibConfigSteamAPI steamAPI;
 	std::string instanceId;
-	short int logAbuse;
-	int logLimit;
+    short int logAbuse;
+    int logLimit;
+
 };
 
-struct EpochlibRedisExecute {
+struct EpochlibDBExecute {
 	bool success;
 	std::string message;
 };
-
 #endif
