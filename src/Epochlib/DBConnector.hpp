@@ -52,10 +52,10 @@ public:
     /*
     *  DB SET / SETEX
     */
-    virtual std::string set(const std::string& key, const std::string& value, const std::string& value2) = 0;
-    virtual std::string setex(const std::string& key, const std::string& value, const std::string& value2, const std::string& value3) = 0;
+    virtual std::string set(const std::string& key, const std::string& value) = 0;
+    virtual std::string setex(const std::string& key, const std::string& ttl, const std::string& value) = 0;
     virtual std::string expire(const std::string& key, const std::string& ttl) = 0;
-    virtual std::string setbit(const std::string& key, const std::string& value, const std::string& value2) = 0;
+    virtual std::string setbit(const std::string& key, const std::string& bitidx, const std::string& value) = 0;
 
     /*
     *  DB DEL

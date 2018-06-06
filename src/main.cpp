@@ -30,7 +30,71 @@ extern "C" {
 
 #undef bind
 
-std::shared_ptr<Epochlib> EpochLibrary;
+std::unique_ptr<Epochlib> EpochLibrary;
+
+bool split1(const std::string&s, const char& delim, std::string& param1) {
+
+    auto idx1 = s.find(delim);
+    if (idx1 == std::string::npos) return false;
+    idx1++;
+    if (s.size() >= idx1) param1 = s.substr(idx1, s.find(delim,idx1) - idx1);
+
+    return true;
+}
+
+bool split2(const std::string&s, const char& delim, std::string& param1, std::string& param2) {
+
+    auto idx1 = s.find(delim);
+    if (idx1 == std::string::npos) return false;
+    idx1++;
+    auto idx2 = s.find(delim,idx1);
+    if (idx2 == std::string::npos) return false;
+    idx2++;
+    param1 = s.substr(idx1, idx2 - 2 - idx1);
+    if (s.size() >= idx2) param2 = s.substr(idx2, s.find(delim, idx2) - idx2);
+
+    return true;
+}
+
+bool split3(const std::string&s, const char& delim, std::string& param1, std::string& param2, std::string& param3) {
+
+    auto idx1 = s.find(delim);
+    if (idx1 == std::string::npos) return false;
+    idx1++;
+    auto idx2 = s.find(delim, idx1);
+    if (idx2 == std::string::npos) return false;
+    idx2++;
+    auto idx3 = s.find(delim, idx2);
+    if (idx3 == std::string::npos) return false;
+    idx3++;
+    param1 = s.substr(idx1, idx2 - 2 - idx1);
+    param2 = s.substr(idx2, idx3 - 2 - idx2);
+    if (s.size() >= idx3) param3 = s.substr(idx3, s.find(delim, idx3) - idx3);
+
+    return true;
+}
+
+bool split4(const std::string&s, const char& delim, std::string& param1, std::string& param2, std::string& param3, std::string& param4) {
+
+    auto idx1 = s.find(delim);
+    if (idx1 == std::string::npos) return false;
+    idx1++;
+    auto idx2 = s.find(delim, idx1);
+    if (idx2 == std::string::npos) return false;
+    idx2++;
+    auto idx3 = s.find(delim, idx2);
+    if (idx3 == std::string::npos) return false;
+    idx3++;
+    auto idx4 = s.find(delim, idx3);
+    if (idx4 == std::string::npos) return false;
+    idx4++;
+    param1 = s.substr(idx1, idx2 - 2 - idx1);
+    param2 = s.substr(idx2, idx3 - 2 - idx2);
+    param3 = s.substr(idx3, idx4 - 2 - idx3);
+    if (s.size() >= idx4) param4 = s.substr(idx4, s.find(delim, idx4) - idx4);
+
+    return true;
+}
 
 void split(const std::string &s, char delim, const std::shared_ptr<std::vector<std::string>>& elems) {
 	std::stringstream ss(s);
@@ -39,6 +103,33 @@ void split(const std::string &s, char delim, const std::shared_ptr<std::vector<s
 	while (std::getline(ss, item, delim)) {
 		elems->emplace_back(item);
 	}
+}
+
+void makeStringFromLongString(const char *s, std::string& func) {
+    int longStringDelim = -1;
+
+    int i = 0;  //TODO maybe ptr arith
+    for (; s[i] != 0x00; i++) {
+        if (s[i] == '#') {
+            longStringDelim = i;
+            break;
+        }
+    }
+
+    if (longStringDelim > -1) {
+        func.assign(s, longStringDelim);
+    }
+    else {
+        func = s;
+    }
+}
+
+void split_fromLongString(const char *s, char delim, const std::shared_ptr<std::vector<std::string>>& elems) {
+
+    std::string infunc;
+    makeStringFromLongString(s, infunc);
+    split(infunc, delim, elems);
+
 }
 
 #ifdef WIN32
@@ -129,372 +220,402 @@ void __stdcall RVExtension(char *_output, int _outputSize, char *_function) {
 void RVExtension(char *_output, int _outputSize, char *_function) {
 #endif
     
-    std::string infunc(_function);
-    auto longStringDelim = infunc.find('#');
-    if (longStringDelim != std::string::npos) {
-        infunc = infunc.substr(0, longStringDelim);
-    }
-
-    std::shared_ptr<std::vector<std::string>> rawCmd = std::make_shared<std::vector<std::string>>(); 
-    split(_function, SEPARATOR_CHAR, rawCmd);
-	std::string hiveOutput = "";
+    std::string hiveOutput = "";
 
     bool assignToInput = false;
 
-	if (EpochLibrary == NULL) {
-		std::string configPath;
+	
 
-#ifdef WIN32
+    bool functionLen = _function[0] != 0 && _function[1] != 0 && _function[2] != 0;
+    bool functionWithParam = functionLen && _function[3] != 0;
+#define functionParamsBegin _function + 4
 
-		// Get file path
-		WCHAR DllPath[MAX_PATH];
-		GetModuleFileName((HINSTANCE)&__ImageBase, DllPath, MAX_PATH);
+	if (functionLen) {
 		
-        std::string filePath = ws2s(DllPath);
+        char callPrefix = _function[0];
+        char functionType = _function[1];
+        char asyncFlag = _function[2];
 
-		// Get file folder and use it as config folder
-		configPath = filePath.substr(0, filePath.find_last_of("\\/"));
-#elif __linux__
-		configPath = "@epochhive";
-#endif
+        switch (callPrefix) {
+        case '0': {
+            //SETUP
+            if (asyncFlag == '0') {
+                //get config
+                hiveOutput = EpochLibrary->getConfig();
+            }
+            else {
+                //initial player check
+                if (functionWithParam) {
 
-		EpochLibrary = std::make_shared<Epochlib>(configPath, getProfileFolder(), _outputSize);
-	}
-
-	if (rawCmd->size() > 0) {
-		
-        std::string &callType = rawCmd->at(0);
-        
-        if (callType.size() == 3) {
-
-            char callPrefix = callType[0];
-            char functionType = callType[0];
-            char asyncFlag = callType[2];
-
-            switch (callPrefix) {
-            case '0': {
-                //SETUP
-                if (asyncFlag == '0') {
-                    //get config
-                    hiveOutput = EpochLibrary->getConfig();
-                }
-                else {
-                    //initial player check
-                    if (rawCmd->size() >= 2) {
+                    std::string param;
+                    if (split1(functionParamsBegin,SEPARATOR_CHAR,param)) {
                         std::thread(
-                        [rawCmd]() {
-                            EpochLibrary->initPlayerCheck(
-                                std::stoll(rawCmd->at(0))
-                            );
+                        [param]() {
+                            try {
+                                EpochLibrary->initPlayerCheck(
+                                    std::stoll(param)
+                                );
+                            }
+                            catch (...) {
+                                //TODO log?
+                            }
                         }).detach();
                     }
                 }
-                break;
             }
-            case '1': {
-                // SET
+            break;
+        }
+        case '1': {
+            // SET
+            if (functionWithParam) {
+
+
                 switch (functionType) {
                 case '1': {
                     //SET
-                    if (asyncFlag == '0') {
-                        if (rawCmd->size() >= 4) {
-                            hiveOutput = EpochLibrary->db->set(rawCmd->at(1), rawCmd->at(2), join(rawCmd, 3));
+                    
+                    std::string param1, param2;
+                    if (split2(functionParamsBegin, SEPARATOR_CHAR, param1, param2)) {
+
+                        if (asyncFlag == '0') {
+
+                            hiveOutput = EpochLibrary->db->set(param1, param2);
+                            
                         }
-                    }
-                    else {
-                        if (rawCmd->size() >= 4) {
-                            std::thread([rawCmd]() {
-                                EpochLibrary->db->set(rawCmd->at(1), rawCmd->at(2), join(rawCmd, 3)); 
+                        else {
+                            std::thread([param1, param2]() {
+                                EpochLibrary->db->set(param1, param2);
                             }).detach();
                         }
-                    };
+                    }
                     break;
                 }
                 case '2': {
                     //SETEX
-                    if (asyncFlag == '0') {
-                        if (rawCmd->size() >= 5) {
-                            hiveOutput = EpochLibrary->db->setex(
-                                rawCmd->at(1), 
-                                rawCmd->at(2), 
-                                rawCmd->at(3), 
-                                join(rawCmd, 4)
-                            );
+                    
+                    std::string p1, p2, p3;
+                    if (split3(functionParamsBegin,SEPARATOR_CHAR,p1,p2,p3)) {
+                        if (asyncFlag == '0') {
+                        
+                            hiveOutput = EpochLibrary->db->setex(p1,p2,p3);
                         }
-                    }
-                    else {
-                        if (rawCmd->size() >= 5) {
+                        else {
                             std::thread(
-                                [rawCmd]() {
-                                    EpochLibrary->db->setex(
-                                        rawCmd->at(1),
-                                        rawCmd->at(2), 
-                                        rawCmd->at(3), 
-                                        join(rawCmd, 4)
-                                    );
+                                [p1,p2,p3]() {
+                                    EpochLibrary->db->setex(p1,p2,p3);
                                 }
                             ).detach();
                         }
-                    };
+                    }
                     break;
                 }
                 case '3': {
                     //EXPIRE
-                    if (asyncFlag == '0') {
-                        if (rawCmd->size() >= 3) {
-                            hiveOutput = EpochLibrary->db->expire(rawCmd->at(1), rawCmd->at(2));
+                    
+                    std::string param1, param2;
+                    if (split2(functionParamsBegin, SEPARATOR_CHAR, param1, param2)) {
+
+                        if (asyncFlag == '0') {
+                            hiveOutput = EpochLibrary->db->expire(param1, param2);
                         }
-                    }
-                    else {
-                        if (rawCmd->size() == 3) {
+                        else {
                             std::thread(
-                                [rawCmd]() {
-                                    EpochLibrary->db->expire(rawCmd->at(1), rawCmd->at(2));
+                                [param1, param2]() {
+                                    EpochLibrary->db->expire(param1, param2);
                                 }
                             ).detach();
                         }
-                    };
+                    }
                     break;
                 }
                 case '4': {
                     //SETBIT
-                    if (rawCmd->size() >= 3) {
-                        std::thread([rawCmd]() {
-                            EpochLibrary->db->setbit(rawCmd->at(1), rawCmd->at(2), rawCmd->at(3));
+                    std::string p1, p2, p3;
+                    if (split3(functionParamsBegin, SEPARATOR_CHAR, p1, p2, p3)) {
+                        std::thread([p1,p2,p3]() {
+                            EpochLibrary->db->setbit(p1,p2,p3);
                         }).detach();
                     }
                     break;
                 }
                 }
-
-                break;
             }
-            case '2': {
-                //GET   
+            break;
+        }
+        case '2': {
+            
+            if (functionWithParam) {
+
+                //GET
                 switch (functionType) {
                 case '0': {
                     //GET
                     assignToInput = true;
-                    if (rawCmd->size() >= 2) {
-                        hiveOutput = EpochLibrary->db->get(join(rawCmd, 1));
+                    
+                    std::string shortFunc;
+                    makeStringFromLongString(functionParamsBegin, shortFunc);
+
+                    std::string p1; //key
+                    if (split1(shortFunc,SEPARATOR_CHAR,p1)) {
+                        hiveOutput = EpochLibrary->db->get(p1);
                     }
                     break;
                 }
                 case '1': {
                     //GET TTL
                     assignToInput = true;
-                    if (rawCmd->size() >= 2) {
-                        hiveOutput = EpochLibrary->db->getTtl(join(rawCmd, 1));
+                    std::string shortFunc;
+                    makeStringFromLongString(functionParamsBegin, shortFunc);
+
+                    std::string p1; //key
+                    if (split1(shortFunc, SEPARATOR_CHAR, p1)) {
+                        hiveOutput = EpochLibrary->db->getTtl(p1);
                     }
                     break;
                 }
                 case '2': {
                     //GET RANGE
                     assignToInput = true;
-                    if (rawCmd->size() >= 4) {
-                        hiveOutput = EpochLibrary->db->getRange(rawCmd->at(1), rawCmd->at(2), rawCmd->at(3));
+                    std::string shortFunc;
+                    makeStringFromLongString(functionParamsBegin, shortFunc);
+
+                    std::string p1,p2,p3; //key idxfrom idxto
+                    if (split3(shortFunc, SEPARATOR_CHAR, p1,p2,p3)) {
+                        hiveOutput = EpochLibrary->db->getRange(p1, p2, p3);
                     }
                     break;
                 }
                 case '4': {
                     //GET BIT
-                    if (rawCmd->size() == 3) {
-                        hiveOutput = EpochLibrary->db->getbit(rawCmd->at(1), rawCmd->at(2));
+                    
+                    std::string p1, p2; //key, index
+                    if (split2(functionParamsBegin,SEPARATOR_CHAR,p1,p2)) {
+                        hiveOutput = EpochLibrary->db->getbit(p1, p2);
                     }
                     break;
                 }
                 case '5': {
                     //EXISTS
-                    if (rawCmd->size() >= 2) {
-                        hiveOutput = EpochLibrary->db->exists(join(rawCmd, 1));
+                    std::string p1; //key
+                    if (split1(functionParamsBegin, SEPARATOR_CHAR, p1)) {
+                        hiveOutput = EpochLibrary->db->exists(p1);
                     }
                     break;
                 }
                 }
-                break;
             }
-            case '3': {
-                //TTL
-                if (rawCmd->size() >= 2) {
-                    hiveOutput = EpochLibrary->db->ttl(join(rawCmd, 1));
-                }
-                break;
+            break;
+        }
+        case '3': {
+            //TTL
+            std::string p1;
+            if (split1(functionParamsBegin,SEPARATOR_CHAR,p1)) {
+                hiveOutput = EpochLibrary->db->ttl(p1);
             }
-            case '4': {
-                //DEL
-                if (rawCmd->size() >= 2) {
-                    hiveOutput = EpochLibrary->db->del(join(rawCmd, 1));
-                }
-                break;
+            break;
+        }
+        case '4': {
+            //DEL
+            std::string p1;
+            if (split1(functionParamsBegin, SEPARATOR_CHAR, p1)) {
+                hiveOutput = EpochLibrary->db->del(p1);
             }
-            case '5': {
-                //UTIL
-                if (functionType == '0') {
-                    hiveOutput = EpochLibrary->db->ping();
-                }
-                else {
-                    hiveOutput = EpochLibrary->getCurrentTime();
-                }
-                break;
+            break;
+        }
+        case '5': {
+            //UTIL
+            if (functionType == '0') {
+                hiveOutput = EpochLibrary->db->ping();
             }
-            case '6': {
-                //ARRAY
-                if (rawCmd->size() >= 2) {
-                    hiveOutput = EpochLibrary->db->lpopWithPrefix("CMD:", join(rawCmd, 1));
-                }
-                break;
+            else {
+                hiveOutput = EpochLibrary->getCurrentTime();
             }
-            case '7': {
-                //LOGGING
+            break;
+        }
+        case '6': {
+            //ARRAY
+            std::string p1;
+            if (split1(functionParamsBegin, SEPARATOR_CHAR, p1)) {
+                hiveOutput = EpochLibrary->db->lpopWithPrefix("CMD:", p1);
+            }
+            break;
+        }
+        case '7': {
+            //LOGGING
+            std::string p1, p2;
+            if (split2(functionParamsBegin, SEPARATOR_CHAR, p1, p2)) {
+
                 if (asyncFlag == '0') {
                     //sync
-                    if (rawCmd->size() >= 3) {
-                        hiveOutput = EpochLibrary->db->log(rawCmd->at(1), join(rawCmd, 2));
-                    }
+                    hiveOutput = EpochLibrary->db->log(p1,p2);
                 }
                 else {
                     // Async
-                    if (rawCmd->size() >= 3) {
-                        std::thread([rawCmd]() {
-                            EpochLibrary->db->log(rawCmd->at(1), join(rawCmd, 2));
-                        }).detach();
-                    }
+                    std::thread([p1,p2]() {
+                        EpochLibrary->db->log(p1, p2);
+                    }).detach();
                 }
-                break;
             }
-            case '8': {
-                //ANTIHACK
-                switch (functionType) {
-                case '0': {
-                    if (asyncFlag == '0') {
-                        if (rawCmd->size() >= 2) {
-                            rawCmd->erase(rawCmd->begin());
+            break;
+        }
+        case '8': {
+            //ANTIHACK
+            switch (functionType) {
+            case '0': {
+                if (functionWithParam) {
+                    std::shared_ptr<std::vector<std::string>> rawCmd = std::make_shared<std::vector<std::string>>();
+                    split(functionParamsBegin, SEPARATOR_CHAR, rawCmd);
+
+                    if (rawCmd->size() >= 2) {
+                        if (asyncFlag == '0') {
                             hiveOutput = EpochLibrary->updatePublicVariable(
                                 *rawCmd
                             );
                         }
-                    }
-                    else {
-                        if (rawCmd->size() >= 2) {
+                        else {
                             std::thread([rawCmd]() {
-                                rawCmd->erase(rawCmd->begin());
                                 EpochLibrary->updatePublicVariable(*rawCmd);
                             }).detach();
                         }
                     }
-                    break;
                 }
-                case '1': {
-                    if (rawCmd->size() == 2) {
-                        hiveOutput = EpochLibrary->getRandomString(std::stoi(rawCmd->at(1)));
-                    }
-                    else if (rawCmd->size() == 1) {
-                        hiveOutput = EpochLibrary->getRandomString(1);
-                    }
-                    break;
+                break;
+            }
+            case '1': {
+                
+                std::shared_ptr<std::vector<std::string>> rawCmd = std::make_shared<std::vector<std::string>>();
+                split(_function, SEPARATOR_CHAR, rawCmd);
+
+                if (rawCmd->size() == 2) {
+                    hiveOutput = EpochLibrary->getRandomString(std::stoi(rawCmd->at(1)));
                 }
-                case '2': {
-                    if (asyncFlag == '0') {
-                        if (rawCmd->size() >= 3) {
-                            hiveOutput = EpochLibrary->addBan(
-                                std::stoll(rawCmd->at(1)), 
-                                join(rawCmd, 2)
-                            );
+                else if (rawCmd->size() == 1) {
+                    hiveOutput = EpochLibrary->getRandomString(1);
+                }
+                break;
+            }
+            case '2': {
+                
+                if (functionWithParam) {
+                    std::string p1,p2;
+                    if (split2(functionParamsBegin, SEPARATOR_CHAR, p1, p2)) {
+                        if (asyncFlag == '0') {
+                            try {
+                                hiveOutput = EpochLibrary->addBan(
+                                    std::stoll(p1),
+                                    p2
+                                );
+                            }
+                            catch (...) {
+                                //TODO log?
+                            }
                         }
-                    }
-                    else {
-                        if (rawCmd->size() >= 3) {
-                            std::thread([rawCmd]() {
-                                EpochLibrary->addBan(
-                                    std::stoll(rawCmd->at(1)),
-                                    join(rawCmd, 2)
-                                ); 
+                        else {
+                            std::thread([p1,p2]() {
+                                try {
+                                    EpochLibrary->addBan(
+                                        std::stoll(p1),
+                                        p2
+                                    );
+                                }
+                                catch (...) {
+                                    //TODO log?
+                                }
                             }).detach();
                         }
                     }
-                    break;
                 }
-                case '3': {
-                    hiveOutput = EpochLibrary->db->increaseBancount();
-                    break;
-                }
-                case '4': { // string to md5
-                    if (rawCmd->size() >= 1) {
-                        rawCmd->erase(rawCmd->begin());
-                        hiveOutput = EpochLibrary->getStringMd5(*rawCmd);
+                break;
+            }
+            case '3': {
+                hiveOutput = EpochLibrary->db->increaseBancount();
+                break;
+            }
+            case '4': { // string to md5
+                if (functionWithParam) {
+                    std::string p1;
+                    if (split1(functionParamsBegin, SEPARATOR_CHAR, p1)) {
+                        hiveOutput = EpochLibrary->getStringMd5({ p1 });
                     }
-                    break;
                 }
+                break;
+            }
+            }
+            break;
+        }
+        case '9': {
+            //BATTLEYE
+            switch (functionType) {
+            case '0': { // say  (Message)
+                if (functionWithParam) {
+                    std::string p1;
+                    if (split1(functionParamsBegin, SEPARATOR_CHAR, p1)) {
+                        std::thread([p1]() {
+                            EpochLibrary->beBroadcastMessage(p1);
+                        }).detach();
+                    }
+                }
+                break;
+            }
+            case '1': { // kick (playerUID, Message)
+                if (functionWithParam) {
+                    std::string p1,p2;
+                    if (split2(functionParamsBegin, SEPARATOR_CHAR, p1,p2)) {
+                        std::thread([p1,p2]() {
+                            EpochLibrary->beKick(p1,p2);
+                        }).detach();
+                    }
+                }
+                break;
+            }
+            case '2': { // ban  (playerUID, Message, Duration)
+                if (functionWithParam) {
+                    std::string p1,p2,p3;
+                    if (split3(functionParamsBegin, SEPARATOR_CHAR, p1,p2,p3)) {
+                        std::thread([p1,p2,p3]() {
+                            EpochLibrary->beBan(p1,p2,p3);
+                        }).detach();
+                    }
+                }
+                break;
+            }
+            case '3': {
+
+                if (asyncFlag == '0') {
+                    // Unlock
+                    std::thread([](){
+                        EpochLibrary->beUnlock();
+                    }).detach();
+                }
+                else {
+                    // Lock Server
+                    std::thread([](){ 
+                        EpochLibrary->beLock(); 
+                    }).detach();
                 }
                 break;
             }
             case '9': {
-                //BATTLEYE
-                switch (functionType) {
-                case '0': { // say  (Message)
-                    if (rawCmd->size() > 1) {
-                        std::thread([rawCmd]() {
-                            EpochLibrary->beBroadcastMessage(rawCmd->at(1)); 
-                        }).detach();
-                    }
-                    break;
-                }
-                case '1': { // kick (playerUID, Message)
-                    if (rawCmd->size() > 2) {
-                        std::thread([rawCmd]() {
-                            EpochLibrary->beKick(rawCmd->at(1), rawCmd->at(2)); 
-                        }).detach();
-                    }
-                    break;
-                }
-                case '2': { // ban  (playerUID, Message, Duration)
-                    if (rawCmd->size() > 3) {
-                        std::thread([rawCmd]() {
-                            EpochLibrary->beBan(rawCmd->at(1), rawCmd->at(2), rawCmd->at(3));
-                        }).detach();
-                    }
-                    break;
-                }
-                case '3': {
-                    if (asyncFlag == '0') {
-                        // Unlock
-                        std::thread([](){
-                            EpochLibrary->beUnlock();
-                        }).detach();
-                    }
-                    else {
-                        // Lock Server
-                        std::thread([](){ 
-                            EpochLibrary->beLock(); 
-                        }).detach();
-                    }
-                    break;
-                }
-                case '9': {
-                    // shutdown
-                    std::thread(
-                    []() { 
-                        EpochLibrary->beShutdown(); 
-                    }).detach();
-                    break;
-                }
-                }
+                // shutdown
+                std::thread(
+                []() { 
+                    EpochLibrary->beShutdown(); 
+                }).detach();
                 break;
             }
-#ifdef EPOCHLIB_TEST
-            case 'T': {
-                hiveOutput = EpochLibrary->getServerMD5();
             }
-#endif
-            default: {
-                hiveOutput = "Unkown command " + rawCmd->at(0);
-                //std::string OStext = std::to_string(_outputSize);
-                //hiveOutput = "Unkown command " + rawCmd[0] + " Max hiveOutput " + OStext;
-            }
-            }
+            break;
         }
-        else {
-            hiveOutput = "Unkown command " + rawCmd->at(0);
+#ifdef EPOCHLIB_TEST
+        case 'T': {
+            hiveOutput = EpochLibrary->getServerMD5();
+        }
+#endif
+        default: {
+            hiveOutput = "Unkown command " + std::string(_function);
+            //std::string OStext = std::to_string(_outputSize);
+            //hiveOutput = "Unkown command " + rawCmd[0] + " Max hiveOutput " + OStext;
+        }
         }
 	}
 	else {
@@ -529,3 +650,64 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
 		return;
 	#endif
 }
+
+
+
+
+void init() {
+    if (EpochLibrary == nullptr) {
+        std::string configPath;
+
+#ifdef WIN32
+
+        // Get file path
+        WCHAR DllPath[MAX_PATH];
+        GetModuleFileName((HINSTANCE)&__ImageBase, DllPath, MAX_PATH);
+
+        std::string filePath = ws2s(DllPath);
+
+        // Get file folder and use it as config folder
+        configPath = filePath.substr(0, filePath.find_last_of("\\/"));
+#elif __linux__
+        configPath = "@epochhive";
+#endif
+
+        EpochLibrary = std::make_unique<Epochlib>(configPath, getProfileFolder(), 10 * 1024);
+    }
+}
+
+#ifdef WIN32
+#include <Windows.h>
+
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved) {
+    switch (ul_reason_for_call) {
+    case DLL_PROCESS_ATTACH: {
+        init();
+        break;
+    };
+    case DLL_THREAD_ATTACH: {
+        break;
+    };
+    case DLL_THREAD_DETACH: {
+        break;
+    };
+    case DLL_PROCESS_DETACH: {
+        break;
+    };
+    }
+
+    return TRUE;
+}
+#endif
+
+#ifdef __GNUC__
+#include <dlfcn.h>
+//GNU C compilers
+static void __attribute__((constructor)) dll_load(void) {
+    init();
+}
+
+static void __attribute__((destructor)) dll_unload(void) {
+    
+}
+#endif

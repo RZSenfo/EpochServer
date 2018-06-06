@@ -257,31 +257,30 @@ std::string RedisConnector::getTtl(const std::string& _key) {
     
 }
 
-std::string RedisConnector::set(const std::string& _key, const std::string& _value, const std::string& _value2) {
+std::string RedisConnector::set(const std::string& _key, const std::string& _value) {
     // _value not used atm	
-    int regexReturnCode = pcre_exec(this->setValueRegex, NULL, _value2.c_str(), _value2.length(), 0, 0, NULL, NULL);
+    int regexReturnCode = pcre_exec(this->setValueRegex, NULL, _value.c_str(), _value.length(), 0, 0, NULL, NULL);
     if (regexReturnCode == 0) {
-        return this->_DBExecToSQF(this->execute("SET %s %s", _key.c_str(), _value2.c_str()), SQF_RETURN_TYPE::NOTHING).toArray();
+        return this->_DBExecToSQF(this->execute("SET %s %s", _key.c_str(), _value.c_str()), SQF_RETURN_TYPE::NOTHING).toArray();
     }
     else {
 
         if (this->config.logAbuse > 0) {
-            this->config.logger->log("[Abuse] SETEX key " + _key + " does not match the allowed syntax!" + (this->config.logAbuse > 1 ? "\n" + _value2 : ""));
+            this->config.logger->log("[Abuse] SETEX key " + _key + " does not match the allowed syntax!" + (this->config.logAbuse > 1 ? "\n" + _value : ""));
         }
 
         return SQF::RET_FAIL();
     }
 }
 
-std::string RedisConnector::setex(const std::string& _key, const std::string& _ttl, const std::string& _value2, const std::string& _value3) {
-    // _value2 not used atm
-    int regexReturnCode = pcre_exec(this->setValueRegex, NULL, _value3.c_str(), _value3.length(), 0, 0, NULL, NULL);
+std::string RedisConnector::setex(const std::string& _key, const std::string& _ttl, const std::string& _value) {
+    int regexReturnCode = pcre_exec(this->setValueRegex, NULL, _value.c_str(), _value.length(), 0, 0, NULL, NULL);
     if (regexReturnCode == 0) {
-        return this->_DBExecToSQF(this->execute("SETEX %s %s %s", _key.c_str(), _ttl.c_str(), _value3.c_str()), SQF_RETURN_TYPE::NOTHING).toArray();
+        return this->_DBExecToSQF(this->execute("SETEX %s %s %s", _key.c_str(), _ttl.c_str(), _value.c_str()), SQF_RETURN_TYPE::NOTHING).toArray();
     }
     else {
         if (this->config.logAbuse > 0) {
-            this->config.logger->log("[Abuse] SETEX key " + _key + " does not match the allowed syntax!" + (this->config.logAbuse > 1 ? "\n" + _value3 : ""));
+            this->config.logger->log("[Abuse] SETEX key " + _key + " does not match the allowed syntax!" + (this->config.logAbuse > 1 ? "\n" + _value : ""));
         }
 
         return SQF::RET_FAIL();

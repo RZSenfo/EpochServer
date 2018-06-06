@@ -356,7 +356,7 @@ std::string MySQLConnector::getTtl(const std::string& _key) {
     return returnSQF.toArray();
 }
 
-std::string MySQLConnector::set(const std::string& _key, const std::string& _value, const std::string& _value2) {
+std::string MySQLConnector::set(const std::string& _key, const std::string& _value) {
     
     std::string table;
     std::string key;
@@ -371,7 +371,7 @@ std::string MySQLConnector::set(const std::string& _key, const std::string& _val
     MYSQL * con = setupCon();
     if (con == nullptr) return SQF::RET_FAIL();
 
-    std::string execQry = "INSERT INTO `" + table + "`(`key`,`value`)VALUES('" + key + "', '" + _value2 + "') ON DUPLICATE KEY UPDATE value = VALUES(value)";
+    std::string execQry = "INSERT INTO `" + table + "`(`key`,`value`)VALUES('" + key + "', '" + _value + "') ON DUPLICATE KEY UPDATE value = VALUES(value)";
 
     if (!mysql_real_query(con, execQry.c_str(), execQry.size())) {
         return SQF::RET_SUCCESS();
@@ -396,7 +396,7 @@ std::string MySQLConnector::set(const std::string& _key, const std::string& _val
 
 }
 
-std::string MySQLConnector::setex(const std::string& _key, const std::string& _ttl, const std::string& _value2, const std::string& _value3) {
+std::string MySQLConnector::setex(const std::string& _key, const std::string& _ttl, const std::string& _value) {
     
     std::string table;
     std::string key;
@@ -412,7 +412,7 @@ std::string MySQLConnector::setex(const std::string& _key, const std::string& _t
     MYSQL * con = setupCon();
     if (con == nullptr) return SQF::RET_FAIL();
 
-    std::string execQry = "INSERT INTO `" + table + "`(`key`,`value`,`ttl`)VALUES('" + key + "','" + _value3 + "',DATE_ADD(NOW(),INTERVAL "+ _ttl +" SECOND)) ON DUPLICATE KEY UPDATE value = VALUES(value), ttl = VALUES(ttl)";
+    std::string execQry = "INSERT INTO `" + table + "`(`key`,`value`,`ttl`)VALUES('" + key + "','" + _value + "',DATE_ADD(NOW(),INTERVAL "+ _ttl +" SECOND)) ON DUPLICATE KEY UPDATE value = VALUES(value), ttl = VALUES(ttl)";
 
     if (!mysql_real_query(con, execQry.c_str(), execQry.size())) {
         return SQF::RET_SUCCESS();
@@ -746,7 +746,7 @@ std::string MySQLConnector::log(const std::string& _key, const std::string& _val
 
     strftime(formatedTime, 64, "%Y-%m-%d %H:%M:%S ", currentTime);
 
-    return set(_key, "", std::string(formatedTime) + " " + _value);
+    return set("LOG:"+_key, std::string(formatedTime) + " " + _value);
 
 }
 

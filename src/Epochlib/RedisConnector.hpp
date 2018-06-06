@@ -48,10 +48,10 @@ public:
     /*
     *  DB SET / SETEX
     */
-    std::string set(const std::string& key, const std::string& value, const std::string& value2);
-    std::string setex(const std::string& key, const std::string& value, const std::string& value2, const std::string& value3);
+    std::string set(const std::string& key, const std::string& value);
+    std::string setex(const std::string& key, const std::string& ttl, const std::string& value);
     std::string expire(const std::string& key, const std::string& ttl);
-    std::string setbit(const std::string& key, const std::string& value, const std::string& value2);
+    std::string setbit(const std::string& key, const std::string& bitidx, const std::string& value);
 
     /*
     *  DB DEL

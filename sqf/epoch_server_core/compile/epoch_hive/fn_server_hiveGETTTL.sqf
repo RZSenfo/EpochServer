@@ -13,9 +13,8 @@
     https://github.com/EpochModTeam/Epoch/tree/release/Sources/epoch_server_core/compile/epoch_hive/fn_server_hiveGETTTL.sqf
 */
 private ["_hiveResponse","_hiveStatus","_hiveMessage","_whileCount"];
-params ["_prefix","_key"];
 
-_hiveResponse = "epochserver" callExtension format ["210|%1:%2", _prefix, _key];
+_hiveResponse = "epochserver" callExtension format (["210|%1:%2"] + _this);
 if !(_hiveResponse isEqualTo "") then {
 	_hiveResponse = parseSimpleArray _hiveResponse;
 

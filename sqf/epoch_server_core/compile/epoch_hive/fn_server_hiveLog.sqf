@@ -12,5 +12,5 @@
     Github:
     https://github.com/EpochModTeam/Epoch/tree/release/Sources/epoch_server_core/compile/epoch_hive/fn_server_hiveLog.sqf
 */
-params ["_prefix","_val"];
-"epochserver" callExtension ([701, _prefix, _val] joinString "|")
+//params ["_prefix","_val"];
+"epochserver" callExtension format (["701|%1|%2"] + _this)
