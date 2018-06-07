@@ -99,6 +99,6 @@ Chameleon const& ConfigFile::Value(std::string const& section, std::string const
 		return Value(section, entry);
 	}
 	catch (const char *) {
-		return content_.insert(std::make_pair(section + '/' + entry, Chameleon(value))).first->second;
+		content_.insert(std::make_pair(section + '/' + entry, Chameleon(value))).first->second;
 	}
 }

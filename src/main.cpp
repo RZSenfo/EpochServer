@@ -18,13 +18,16 @@
 #define SEPARATOR "|"
 #define SEPARATOR_CHAR '|'
 
+#define DEV_DEBUG
+
+
 #ifdef WIN32
 extern "C" {
-	__declspec (dllexport) void __stdcall RVExtension(char *output, int outputSize, const char *function);
+	__declspec (dllexport) void __stdcall RVExtension(char *output, int outputSize, char *function);
 }
 #else
 extern "C" {
-        void RVExtension (char* output, int outputSize, const char* function);
+        void RVExtension (char* output, int outputSize, char* function);
 }
 #endif
 
@@ -32,12 +35,22 @@ extern "C" {
 
 std::unique_ptr<Epochlib> EpochLibrary;
 
+std::unordered_map<unsigned long, std::string> resultcache;
+unsigned long current_id = 0;
+
 bool split1(const std::string&s, const char& delim, std::string& param1) {
 
-    auto idx1 = s.find(delim);
-    if (idx1 == std::string::npos) return false;
-    idx1++;
-    if (s.size() >= idx1) param1 = s.substr(idx1, s.find(delim,idx1) - idx1);
+    param1 = s.substr(0, s.find(delim));
+
+#ifdef DEV_DEBUG
+    std::stringstream sstream;
+    sstream << std::endl << "s: " << s << std::endl;
+    sstream << "p1: " << param1 << std::endl;
+    EpochLibrary->log(
+        sstream.str()
+    );
+#endif
+
 
     return true;
 }
@@ -46,12 +59,25 @@ bool split2(const std::string&s, const char& delim, std::string& param1, std::st
 
     auto idx1 = s.find(delim);
     if (idx1 == std::string::npos) return false;
+    param1 = s.substr(0, idx1);
     idx1++;
-    auto idx2 = s.find(delim,idx1);
-    if (idx2 == std::string::npos) return false;
-    idx2++;
-    param1 = s.substr(idx1, idx2 - 2 - idx1);
-    if (s.size() >= idx2) param2 = s.substr(idx2, s.find(delim, idx2) - idx2);
+    if (s.size() >= idx1) {
+        auto idx2 = s.find(delim, idx1);
+        if (idx2 == std::string::npos)
+            param2 = s.substr(idx1);
+        else
+            param2 = s.substr(idx1, idx2 - idx1);
+    }
+
+#ifdef DEV_DEBUG
+    std::stringstream sstream;
+    sstream << std::endl << "s: " << s << std::endl;
+    sstream << "p1: " << param1 << std::endl;
+    sstream << "p2: " << param2 << std::endl;
+    EpochLibrary->log(
+        sstream.str()
+    );
+#endif
 
     return true;
 }
@@ -64,12 +90,26 @@ bool split3(const std::string&s, const char& delim, std::string& param1, std::st
     auto idx2 = s.find(delim, idx1);
     if (idx2 == std::string::npos) return false;
     idx2++;
-    auto idx3 = s.find(delim, idx2);
-    if (idx3 == std::string::npos) return false;
-    idx3++;
-    param1 = s.substr(idx1, idx2 - 2 - idx1);
-    param2 = s.substr(idx2, idx3 - 2 - idx2);
-    if (s.size() >= idx3) param3 = s.substr(idx3, s.find(delim, idx3) - idx3);
+    param1 = s.substr(0, idx1 - 1);
+    param2 = s.substr(idx1, idx2 - 1 - idx1);
+    if (s.size() >= idx2) {
+        auto idx3 = s.find(delim, idx2);
+        if (idx3 == std::string::npos)
+            param3 = s.substr(idx2);
+        else 
+            param3 = s.substr(idx2, idx3 - idx2);
+    }
+
+#ifdef DEV_DEBUG
+    std::stringstream sstream;
+    sstream << std::endl << "s: " << s << std::endl;
+    sstream << "p1: " << param1 << std::endl;
+    sstream << "p2: " << param2 << std::endl;
+    sstream << "p3: " << param3 << std::endl;
+    EpochLibrary->log(
+        sstream.str()
+    );
+#endif
 
     return true;
 }
@@ -85,13 +125,28 @@ bool split4(const std::string&s, const char& delim, std::string& param1, std::st
     auto idx3 = s.find(delim, idx2);
     if (idx3 == std::string::npos) return false;
     idx3++;
-    auto idx4 = s.find(delim, idx3);
-    if (idx4 == std::string::npos) return false;
-    idx4++;
-    param1 = s.substr(idx1, idx2 - 2 - idx1);
-    param2 = s.substr(idx2, idx3 - 2 - idx2);
-    param3 = s.substr(idx3, idx4 - 2 - idx3);
-    if (s.size() >= idx4) param4 = s.substr(idx4, s.find(delim, idx4) - idx4);
+    param1 = s.substr(0,    idx1 - 1);
+    param2 = s.substr(idx1, idx2 - 1 - idx1);
+    param3 = s.substr(idx2, idx3 - 1 - idx2);
+    if (s.size() >= idx3) {
+        auto idx4 = s.find(delim, idx3);
+        if (idx4 == std::string::npos)
+            param4 = s.substr(idx3);
+        else
+            param4 = s.substr(idx3, idx4 - idx3);
+    }
+
+#ifdef DEV_DEBUG
+    std::stringstream sstream;
+    sstream << std::endl << "s: " << s << std::endl;
+    sstream << "p1: " << param1 << std::endl;
+    sstream << "p2: " << param2 << std::endl;
+    sstream << "p3: " << param3 << std::endl;
+    sstream << "p4: " << param4 << std::endl;
+    EpochLibrary->log(
+        sstream.str()
+    );
+#endif
 
     return true;
 }
@@ -222,19 +277,32 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
     
     std::string hiveOutput = "";
 
-    bool assignToInput = false;
-
-	
+    //bool assignToInput = false;
 
     bool functionLen = _function[0] != 0 && _function[1] != 0 && _function[2] != 0;
     bool functionWithParam = functionLen && _function[3] != 0;
 #define functionParamsBegin _function + 4
+
+#ifdef DEV_DEBUG
+    std::stringstream sstream;
+    sstream << std::endl << "function: ";
+    if (functionLen) sstream << _function[0] << _function[1] << _function[2];
+    else sstream << " <undef> ";
+    sstream << std::endl;
+    sstream << "Has 3 Chars: " << std::boolalpha << functionLen << std::endl;
+    sstream << "Has 4 Chars: " << std::boolalpha << functionWithParam << std::endl;
+    //sstream << "Param: " << functionParamsBegin << std::endl;
+    EpochLibrary->log(
+        sstream.str()
+    );
+#endif
 
 	if (functionLen) {
 		
         char callPrefix = _function[0];
         char functionType = _function[1];
         char asyncFlag = _function[2];
+
 
         switch (callPrefix) {
         case '0': {
@@ -261,6 +329,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                             }
                         }).detach();
                     }
+                    else hiveOutput = SQF::RET_FAIL();
                 }
             }
             break;
@@ -277,6 +346,17 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                     std::string param1, param2;
                     if (split2(functionParamsBegin, SEPARATOR_CHAR, param1, param2)) {
 
+#ifdef DEV_DEBUG
+                        sstream << "Param1: " << param1 << std::endl;
+                        sstream << "Param2: " << param2 << std::endl;
+                        sstream << "Param3 size: " << param2.size() << std::endl;
+                        EpochLibrary->log(
+                            sstream.str()
+                        );
+#endif
+
+
+
                         if (asyncFlag == '0') {
 
                             hiveOutput = EpochLibrary->db->set(param1, param2);
@@ -288,6 +368,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                             }).detach();
                         }
                     }
+                    else hiveOutput = SQF::RET_FAIL();
                     break;
                 }
                 case '2': {
@@ -307,6 +388,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                             ).detach();
                         }
                     }
+                    else hiveOutput = SQF::RET_FAIL();
                     break;
                 }
                 case '3': {
@@ -326,6 +408,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                             ).detach();
                         }
                     }
+                    else hiveOutput = SQF::RET_FAIL();
                     break;
                 }
                 case '4': {
@@ -350,48 +433,68 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                 switch (functionType) {
                 case '0': {
                     //GET
-                    assignToInput = true;
                     
-                    std::string shortFunc;
-                    makeStringFromLongString(functionParamsBegin, shortFunc);
-
                     std::string p1; //key
-                    if (split1(shortFunc,SEPARATOR_CHAR,p1)) {
+                    if (split1(functionParamsBegin,SEPARATOR_CHAR,p1)) {
                         hiveOutput = EpochLibrary->db->get(p1);
+                    }
+                    else {
+                        hiveOutput = SQF::RET_FAIL();
                     }
                     break;
                 }
                 case '1': {
                     //GET TTL
-                    assignToInput = true;
-                    std::string shortFunc;
-                    makeStringFromLongString(functionParamsBegin, shortFunc);
-
                     std::string p1; //key
-                    if (split1(shortFunc, SEPARATOR_CHAR, p1)) {
+                    if (split1(functionParamsBegin, SEPARATOR_CHAR, p1)) {
                         hiveOutput = EpochLibrary->db->getTtl(p1);
                     }
+                    else hiveOutput = SQF::RET_FAIL();
+                    break;
+                }
+                case '9': {
+                    std::string p1; //fetchkey
+                    if (split1(functionParamsBegin, SEPARATOR_CHAR, p1)) {
+                        
+                        try {
+
+                            unsigned long _key = std::stoul(p1);
+
+                            std::string& output = resultcache.at(_key);
+                            
+                            if (output.size() > 10000) {
+                                hiveOutput = output.substr(0, 10000);
+                                output = output.erase(0,10000);
+                            }
+                            else {
+                                hiveOutput = output;
+                            }
+
+                        }
+                        catch (...) {
+                            hiveOutput = SQF::RET_FAIL();
+                        }
+
+                    }
+                    else hiveOutput = SQF::RET_FAIL();
                     break;
                 }
                 case '2': {
                     //GET RANGE
-                    assignToInput = true;
-                    std::string shortFunc;
-                    makeStringFromLongString(functionParamsBegin, shortFunc);
-
                     std::string p1,p2,p3; //key idxfrom idxto
-                    if (split3(shortFunc, SEPARATOR_CHAR, p1,p2,p3)) {
+                    if (split3(functionParamsBegin, SEPARATOR_CHAR, p1,p2,p3)) {
                         hiveOutput = EpochLibrary->db->getRange(p1, p2, p3);
                     }
+                    else hiveOutput = SQF::RET_FAIL();
                     break;
                 }
                 case '4': {
                     //GET BIT
-                    
                     std::string p1, p2; //key, index
                     if (split2(functionParamsBegin,SEPARATOR_CHAR,p1,p2)) {
                         hiveOutput = EpochLibrary->db->getbit(p1, p2);
                     }
+                    else hiveOutput = SQF::RET_FAIL();
                     break;
                 }
                 case '5': {
@@ -400,9 +503,13 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                     if (split1(functionParamsBegin, SEPARATOR_CHAR, p1)) {
                         hiveOutput = EpochLibrary->db->exists(p1);
                     }
+                    else hiveOutput = SQF::RET_FAIL();
                     break;
                 }
                 }
+            }
+            else {
+                hiveOutput = SQF::RET_FAIL();
             }
             break;
         }
@@ -412,6 +519,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
             if (split1(functionParamsBegin,SEPARATOR_CHAR,p1)) {
                 hiveOutput = EpochLibrary->db->ttl(p1);
             }
+            else hiveOutput = SQF::RET_FAIL();
             break;
         }
         case '4': {
@@ -420,6 +528,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
             if (split1(functionParamsBegin, SEPARATOR_CHAR, p1)) {
                 hiveOutput = EpochLibrary->db->del(p1);
             }
+            else hiveOutput = SQF::RET_FAIL();
             break;
         }
         case '5': {
@@ -438,6 +547,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
             if (split1(functionParamsBegin, SEPARATOR_CHAR, p1)) {
                 hiveOutput = EpochLibrary->db->lpopWithPrefix("CMD:", p1);
             }
+            else hiveOutput = SQF::RET_FAIL();
             break;
         }
         case '7': {
@@ -456,6 +566,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                     }).detach();
                 }
             }
+            else hiveOutput = SQF::RET_FAIL();
             break;
         }
         case '8': {
@@ -478,11 +589,13 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                             }).detach();
                         }
                     }
+                    else hiveOutput = SQF::RET_FAIL();
                 }
                 break;
             }
             case '1': {
                 
+                //TODO remove shared ptr, no use here
                 std::shared_ptr<std::vector<std::string>> rawCmd = std::make_shared<std::vector<std::string>>();
                 split(_function, SEPARATOR_CHAR, rawCmd);
 
@@ -524,6 +637,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                             }).detach();
                         }
                     }
+                    else hiveOutput = SQF::RET_FAIL();
                 }
                 break;
             }
@@ -537,6 +651,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                     if (split1(functionParamsBegin, SEPARATOR_CHAR, p1)) {
                         hiveOutput = EpochLibrary->getStringMd5({ p1 });
                     }
+                    else hiveOutput = SQF::RET_FAIL();
                 }
                 break;
             }
@@ -554,6 +669,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                             EpochLibrary->beBroadcastMessage(p1);
                         }).detach();
                     }
+                    else hiveOutput = SQF::RET_FAIL();
                 }
                 break;
             }
@@ -565,6 +681,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                             EpochLibrary->beKick(p1,p2);
                         }).detach();
                     }
+                    else hiveOutput = SQF::RET_FAIL();
                 }
                 break;
             }
@@ -576,6 +693,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                             EpochLibrary->beBan(p1,p2,p3);
                         }).detach();
                     }
+                    else hiveOutput = SQF::RET_FAIL();
                 }
                 break;
             }
@@ -609,6 +727,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
 #ifdef EPOCHLIB_TEST
         case 'T': {
             hiveOutput = EpochLibrary->getServerMD5();
+            break;
         }
 #endif
         default: {
@@ -622,29 +741,27 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
 		hiveOutput = "0.6.0.0";
 	}
 
-    if (assignToInput) {
+#ifdef DEV_DEBUG
+    std::stringstream outstream;
+    outstream << std::endl << "hiveOutput: " << hiveOutput << std::endl;
+    EpochLibrary->log(
+        outstream.str()
+    );
+#endif
 
-        if (hiveOutput.size() > 999500) {
-            strncpy(_output, "[0,\"OUTPUT TOO LARGE\"]", _outputSize);
-        }
-        else {
-            
-            //get msg size and push it infront
-            std::string size = std::to_string(hiveOutput.size());
-            hiveOutput = size + "#" + hiveOutput;
+    if (hiveOutput.size() >= _outputSize) {
+        
+        if (current_id > 10000) current_id = 0;
+        
+        resultcache.insert_or_assign(current_id, hiveOutput);
 
-            //overwrite input
-            strncpy(_function, hiveOutput.c_str(), _outputSize);
+        hiveOutput = "[2," + std::to_string(current_id) + "]";
 
-            //output is empty by default
-            //it signals that everthing is ok
-        }
-
-    }
-    else {
-	    strncpy(_output, hiveOutput.c_str(), _outputSize);
+        current_id++;
     }
 
+	strncpy(_output, hiveOutput.c_str(), _outputSize);
+    
 	#ifdef __linux__
 		_output[_outputSize - 1] = '\0';
 		return;
@@ -683,6 +800,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
     switch (ul_reason_for_call) {
     case DLL_PROCESS_ATTACH: {
         init();
+        resultcache.reserve(10000);
         break;
     };
     case DLL_THREAD_ATTACH: {

@@ -14,34 +14,47 @@
 */
 
 private ["_hiveResponse","_hiveStatus","_hiveMessage"];
-params ["_prefix","_key"];
 
 //input will be overwritten
-private _input = format["200|%1:%2#%3", _prefix, _key, EPOCH_REALLYLONGDATABASESTRING];
-_hiveResponse = "epochserver" callExtension _input;
+_hiveResponse = "epochserver" callExtension format (["200|%1:%2"] + _this);
 
 //the output is only filled with errors in this case
-if (_hiveResponse isEqualTo "") then {
+if !(_hiveResponse isEqualTo "") then {
     
-    //Layout is xxxx#yyyyy where xxxx is the size of yyyyy
-
-    //find the delimeter
-    private _idx = _input find "#";
-
-    //parse the size
-    private _size = parseNumber (_input select [0, _idx - 1]);
+    diag_log "GETTTL RETURN:";
+	diag_log _hiveResponse;
     
-    //select the actual output
-    _input = _input select [_idx + 1, _size];
+	
+    _hiveResponse = parseSimpleArray _hiveResponse;
+	params [["_hiveStatus", 0],["_data",[]]];
 
-    // avoid parse if data is blank and return empty array
-    if (_input isEqualTo "") exitWith {
-        [0,[]]
-    }; 
-    
-    parseSimpleArray _input
+	if (_hiveStatus == 2) then {
+		
+		private _fetchKey = format ["290|%1",_data];
+		private _hdata = "";
+
+		private _loop = true;
+		while {_loop} do {
+			_hiveResponse = "epochserver" callExtension _fetchKey;
+			_hdata = _hdata + _hiveResponse;
+			_loop = count _hiveResponse == 10000;
+		};
+
+		parseSimpleArray _hdata params [["_realStatus",0],["_realData",[]]];
+        _hiveStatus = _realStatus;
+        _data = _realData;
+
+	};
+
+	if (_hiveStatus == 1) then {
+		[1,_data]
+	} else {
+		[0,[]]
+	};
 
 } else {
     //something went wrong: output too large
+    diag_log "GET RETURN:";
+    diag_log [0, ["OUTPUT TOO LARGE"]];
     [0, ["OUTPUT TOO LARGE"]]
 };

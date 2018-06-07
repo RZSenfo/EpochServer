@@ -42,6 +42,7 @@ class cfgFunctions
 			class server_hiveDEL       		{};
 			class server_hiveLog       		{};
             class server_hiveUnitTest       {};
+			class server_setupLongString	{ preInit = 1; };
 		};
 	};
 };

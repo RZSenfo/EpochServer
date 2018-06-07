@@ -123,6 +123,9 @@ public:
 	 */
 	void beLock();
 	void beUnlock();
+
+
+    void log(const std::string& log);
 };
 
 #endif

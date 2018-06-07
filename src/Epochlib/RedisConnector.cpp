@@ -75,12 +75,13 @@ EpochlibDBExecute RedisConnector::execute(const char *format, ...) {
 			this->config.logger->log("[Redis] Error command " + std::string(reply->str));
 		}
 		else {
-			returnObj.success = true;
 
 			if (reply->type == REDIS_REPLY_STRING) {
-				returnObj.message = reply->str;
+                returnObj.success = reply->str != NULL;
+                returnObj.message = reply->str;
 			}
 			else if (reply->type == REDIS_REPLY_INTEGER) {
+			    returnObj.success = true;
 				std::stringstream IntToString;
 				IntToString << reply->integer;
 				returnObj.message = IntToString.str();
@@ -160,10 +161,14 @@ void RedisConnector::_reconnect(bool _force) {
 }
 
 std::string RedisConnector::getRange(const std::string& _key, const std::string& _value, const std::string& _value2) {
-    SQF returnSqf;
     EpochlibDBExecute value = this->execute("GETRANGE %s %s %s", _key.c_str(), _value.c_str(), _value2.c_str());
     if (value.success == 1) {
+        
+        SQF returnSqf;
         returnSqf.push_number(SQF_RETURN_STATUS::SUCCESS);
+        
+        
+        /*
         std::string output = value.message;
         std::stringstream outputSteam;
         for (std::string::iterator it = output.begin(); it != output.end(); ++it) {
@@ -172,25 +177,34 @@ std::string RedisConnector::getRange(const std::string& _key, const std::string&
             }
             outputSteam << *it;
         }
-        returnSqf.push_str(outputSteam.str().c_str(), 1);
+        */
+        if (value.message.empty()) {
+            returnSqf.push_empty_str();
+        } else if(value.message[0] == '[') {
+            returnSqf.push_array(value.message);
+        }
+        else {
+            returnSqf.push_str(value.message);
+        }
+        return returnSqf.toArray();
     }
     else {
-        returnSqf.push_number(SQF_RETURN_STATUS::FAIL);
+        return SQF::RET_FAIL();
     }
-    return returnSqf.toArray();
 }
 
 std::string RedisConnector::get(const std::string& _key) {
 
-    SQF returnSqf;
 
     auto temp = this->execute("GET %s", _key.c_str());
     
     // GET success proceed
     if (temp.success == 1) {
         
+        SQF returnSqf;
         returnSqf.push_number(SQF_RETURN_STATUS::SUCCESS); // single row
 
+        /*
         std::string output = temp.message;
         
         std::stringstream outputSteam;
@@ -202,29 +216,32 @@ std::string RedisConnector::get(const std::string& _key) {
         }
 
         auto result = outputSteam.str();
-        if (!result.empty() && result[0] == '[') {
-            returnSqf.push_array(result.c_str());
+        */
+        if (temp.message.empty()) {
+            returnSqf.push_empty_str();
+        } else if (temp.message[0] == '[') {
+            returnSqf.push_array(temp.message.c_str());
         }
         else {
-            returnSqf.push_str(result.c_str(), 1);
+            returnSqf.push_str(temp.message.c_str(), 0);
         }
 
+        return returnSqf.toArray();
     }
     else {
-        returnSqf.push_number(SQF_RETURN_STATUS::FAIL);
+        return SQF::RET_FAIL();
     }
 
-    return returnSqf.toArray();
 }
 
 std::string RedisConnector::getTtl(const std::string& _key) {
-    SQF returnSqf;
 
     // No temp GET found -> GET new one
     auto temp = this->execute("GET %s", _key.c_str());
 
     if (temp.success == 1) {
 
+        SQF returnSqf;
         EpochlibDBExecute ttl = this->execute("TTL %s", _key.c_str());
 
         size_t messageSize = 0;
@@ -238,7 +255,8 @@ std::string RedisConnector::getTtl(const std::string& _key) {
         else {
             returnSqf.push_number(-1);
         }
-
+        
+        /*
         std::string output = temp.message;
         std::stringstream outputSteam;
         for (std::string::iterator it = output.begin(); it != output.end(); ++it) {
@@ -247,7 +265,15 @@ std::string RedisConnector::getTtl(const std::string& _key) {
             }
             outputSteam << *it;
         }
-        returnSqf.push_str(outputSteam.str().c_str(), 1);
+        returnSqf.push_str(outputSteam.str().c_str(), 0);
+        */
+
+        if (!temp.message.empty() && temp.message[0] == '[') {
+            returnSqf.push_array(temp.message.c_str());
+        }
+        else {
+            returnSqf.push_str(temp.message.c_str(), 0);
+        }
 
         return returnSqf.toArray();
     }

@@ -253,7 +253,7 @@ std::string MySQLConnector::get(const std::string& _key) {
         SQF returnSqf;
         returnSqf.push_number(SQF_RETURN_STATUS::SUCCESS);
         if (_result.second.empty() || _result.second[0] != '[') {
-            returnSqf.push_str(_result.second.c_str());
+            returnSqf.push_str(_result.second.c_str(),1);
         }
         else {
             returnSqf.push_array(_result.second);

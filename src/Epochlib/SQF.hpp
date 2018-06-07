@@ -25,8 +25,10 @@ private:
 public:
 	SQF();
 	~SQF();
-	void push_str(const char *String);
-	void push_str(const char *String, int Flag);
+    void push_empty_str();
+    void push_nil();
+	void push_str(const char *String, int Flag = 0);
+    void push_str(const std::string& String, int Flag = 0);
 	void push_number(long long int Number);
 	void push_number(const char *Number, size_t NumberSize);
 	void push_array(const char *String);

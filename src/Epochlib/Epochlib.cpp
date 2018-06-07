@@ -457,8 +457,10 @@ bool Epochlib::_fileExist(const std::string& _filename) {
 }
 
 bool Epochlib::_loadConfig(const std::string& configFilename) {
-	if (this->_fileExist(configFilename)) {
-		ConfigFile configFile(configFilename);
+	
+    if (this->_fileExist(configFilename)) {
+		
+        ConfigFile configFile(configFilename);
 
 		// EpochServer config
 		this->config.battlEyePath   = (std::string)configFile.Value("EpochServer", "BattlEyePath", (this->config.profilePath.length() > 0 ? this->config.profilePath + "/battleye" : ""));
@@ -478,7 +480,7 @@ bool Epochlib::_loadConfig(const std::string& configFilename) {
 		this->config.db.port     = (unsigned short int)configFile.Value(dbType, "Port", dbType == "Redis" ? 6379 : 3306);
         this->config.db.user     = (std::string)configFile.Value(dbType, "User", dbType == "Redis" ? "" : "root");
         this->config.db.password = (std::string)configFile.Value(dbType, "Password", "");
-		this->config.db.dbIndex  = (unsigned int)configFile.Value(dbType, "DB", dbType == "Redis" ? "0" : "epoch");
+		this->config.db.dbIndex  = (std::string)configFile.Value(dbType, "DB", dbType == "Redis" ? "0" : "epoch");
 		this->config.db.logger   = this->logger;
 
 		// SteamApi
@@ -627,3 +629,6 @@ void Epochlib::beUnlock() {
     bec.disconnect();
 }
 
+void Epochlib::log(const std::string& log) {
+    this->logger->log(log);
+}
