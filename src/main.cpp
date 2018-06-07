@@ -18,7 +18,7 @@
 #define SEPARATOR "|"
 #define SEPARATOR_CHAR '|'
 
-#define DEV_DEBUG
+//#define DEV_DEBUG
 
 
 #ifdef WIN32
@@ -35,7 +35,7 @@ extern "C" {
 
 std::unique_ptr<Epochlib> EpochLibrary;
 
-std::unordered_map<unsigned long, std::string> resultcache;
+std::vector<std::string> resultcache;
 unsigned long current_id = 0;
 
 bool split1(const std::string&s, const char& delim, std::string& param1) {
@@ -151,12 +151,12 @@ bool split4(const std::string&s, const char& delim, std::string& param1, std::st
     return true;
 }
 
-void split(const std::string &s, char delim, const std::shared_ptr<std::vector<std::string>>& elems) {
+void split(const std::string &s, char delim, std::vector<std::string>& elems) {
 	std::stringstream ss(s);
 	std::string item;
-    elems->reserve(5);
+    elems.reserve(5);
 	while (std::getline(ss, item, delim)) {
-		elems->emplace_back(item);
+		elems.emplace_back(item);
 	}
 }
 
@@ -177,14 +177,6 @@ void makeStringFromLongString(const char *s, std::string& func) {
     else {
         func = s;
     }
-}
-
-void split_fromLongString(const char *s, char delim, const std::shared_ptr<std::vector<std::string>>& elems) {
-
-    std::string infunc;
-    makeStringFromLongString(s, infunc);
-    split(infunc, delim, elems);
-
 }
 
 #ifdef WIN32
@@ -574,18 +566,18 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
             switch (functionType) {
             case '0': {
                 if (functionWithParam) {
-                    std::shared_ptr<std::vector<std::string>> rawCmd = std::make_shared<std::vector<std::string>>();
+                    std::vector<std::string> rawCmd;
                     split(functionParamsBegin, SEPARATOR_CHAR, rawCmd);
 
-                    if (rawCmd->size() >= 2) {
+                    if (rawCmd.size() >= 2) {
                         if (asyncFlag == '0') {
                             hiveOutput = EpochLibrary->updatePublicVariable(
-                                *rawCmd
+                                rawCmd
                             );
                         }
                         else {
                             std::thread([rawCmd]() {
-                                EpochLibrary->updatePublicVariable(*rawCmd);
+                                EpochLibrary->updatePublicVariable(rawCmd);
                             }).detach();
                         }
                     }
@@ -595,15 +587,20 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
             }
             case '1': {
                 
-                //TODO remove shared ptr, no use here
-                std::shared_ptr<std::vector<std::string>> rawCmd = std::make_shared<std::vector<std::string>>();
+                std::vector<std::string> rawCmd;
                 split(_function, SEPARATOR_CHAR, rawCmd);
 
-                if (rawCmd->size() == 2) {
-                    hiveOutput = EpochLibrary->getRandomString(std::stoi(rawCmd->at(1)));
+                try {
+
+                    if (rawCmd.size() == 2) {
+                        hiveOutput = EpochLibrary->getRandomString(std::stoi(rawCmd.at(1)));
+                    }
+                    else if (rawCmd.size() == 1) {
+                        hiveOutput = EpochLibrary->getRandomString(1);
+                    }
                 }
-                else if (rawCmd->size() == 1) {
-                    hiveOutput = EpochLibrary->getRandomString(1);
+                catch (...) {
+                    hiveOutput = SQF::RET_FAIL();
                 }
                 break;
             }
@@ -647,12 +644,17 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
             }
             case '4': { // string to md5
                 if (functionWithParam) {
-                    std::string p1;
-                    if (split1(functionParamsBegin, SEPARATOR_CHAR, p1)) {
-                        hiveOutput = EpochLibrary->getStringMd5({ p1 });
-                    }
-                    else hiveOutput = SQF::RET_FAIL();
+                    
+                    std::vector<std::string> rawCmd;
+                    split(functionParamsBegin, SEPARATOR_CHAR, rawCmd);
+
+                    if (rawCmd.size() > 0)
+                        hiveOutput = EpochLibrary->getStringMd5(rawCmd);
+                    else
+                        hiveOutput = SQF::RET_FAIL();
+                    
                 }
+                else hiveOutput = SQF::RET_FAIL();
                 break;
             }
             }
@@ -751,9 +753,9 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
 
     if (hiveOutput.size() >= _outputSize) {
         
-        if (current_id > 10000) current_id = 0;
+        if (current_id >= 10000) current_id = 0;
         
-        resultcache.insert_or_assign(current_id, hiveOutput);
+        resultcache[current_id] = hiveOutput;
 
         hiveOutput = "[2," + std::to_string(current_id) + "]";
 
@@ -800,7 +802,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
     switch (ul_reason_for_call) {
     case DLL_PROCESS_ATTACH: {
         init();
-        resultcache.reserve(10000);
+        resultcache = std::vector<std::string>(10000,"");
         break;
     };
     case DLL_THREAD_ATTACH: {
