@@ -21,14 +21,15 @@ _hiveResponse = "epochserver" callExtension format (["200|%1:%2"] + _this);
 //the output is only filled with errors in this case
 if !(_hiveResponse isEqualTo "") then {
     
-    diag_log "GETTTL RETURN:";
-	diag_log _hiveResponse;
-    
-	
-    _hiveResponse = parseSimpleArray _hiveResponse;
-	params [["_hiveStatus", 0],["_data",[]]];
+#ifdef DEV_DEBUG
+    diag_log "GET RETURN:";
+    diag_log _hiveResponse;
+#endif
 
-	if (_hiveStatus == 2) then {
+    _hiveResponse = parseSimpleArray _hiveResponse;
+	_hiveResponse params [["_hiveStatus", 0],["_data",[]]];
+
+	if (_hiveStatus isEqualTo 2) then {
 		
 		private _fetchKey = format ["290|%1",_data];
 		private _hdata = "";
@@ -44,7 +45,13 @@ if !(_hiveResponse isEqualTo "") then {
         _hiveStatus = _realStatus;
         _data = _realData;
 
+#ifdef DEV_DEBUG
+        diag_log "GET2 RETURN:";
+        diag_log _hdata;
+#endif
+
 	};
+    
 
 	if (_hiveStatus == 1) then {
 		[1,_data]

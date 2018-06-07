@@ -17,18 +17,19 @@ private ["_hiveResponse","_hiveStatus","_hiveMessage","_whileCount"];
 _hiveResponse = "epochserver" callExtension format (["210|%1:%2"] + _this);
 
 if !(_hiveResponse isEqualTo "") then {
-    
-	diag_log "GETTTL RETURN:";
+
+#ifdef DEV_DEBUG    
+    diag_log "GETTTL RETURN:";
 	diag_log _hiveResponse;
-    
-	
+#endif
+
     _hiveResponse = parseSimpleArray _hiveResponse;
-	params [["_hiveStatus", 0],["_hiveTTL", -1]["_data",[]]];
+	_hiveResponse params [["_hiveStatus", 0],["_hiveTTL", -1],["_data",[]]];
 
 	if (_hiveStatus == 2) then {
 		
 		private _fetchKey = format ["290|%1",_hiveTTL];
-		_hdata = "";
+		private _hdata = "";
 
 		private _loop = true;
 		while {_loop} do {
@@ -41,7 +42,14 @@ if !(_hiveResponse isEqualTo "") then {
 		_hiveStatus = _realStatus;
 		_hiveTTL = _realTTL;
 		_data = _realData;
+		
+#ifdef DEV_DEBUG
+		diag_log "GETTTL RETURN2:";
+		diag_log _hdata;
+#endif
+
 	};
+	
 
 	if (_hiveStatus == 1) then {
 		[1,_data,_hiveTTL]
