@@ -14,6 +14,8 @@
 #include <fstream>
 #include <vector>
 #include <thread>
+#include <queue>
+#include <atomic>
 
 #define SEPARATOR "|"
 #define SEPARATOR_CHAR '|'
@@ -31,12 +33,17 @@ extern "C" {
 }
 #endif
 
-#undef bind
-
 std::unique_ptr<Epochlib> EpochLibrary;
 
 std::vector<std::string> resultcache;
 unsigned long current_id = 0;
+
+std::vector<std::thread> threadpool;
+std::queue<std::function<void(void)>> tasks;
+std::mutex taskmutex;
+std::condition_variable notifier;
+std::atomic<bool> stop = false;
+
 
 bool split1(const std::string&s, const char& delim, std::string& param1) {
 
@@ -295,7 +302,6 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
         char functionType = _function[1];
         char asyncFlag = _function[2];
 
-
         switch (callPrefix) {
         case '0': {
             //SETUP
@@ -309,7 +315,9 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
 
                     std::string param;
                     if (split1(functionParamsBegin,SEPARATOR_CHAR,param)) {
-                        std::thread(
+                        std::unique_lock<std::mutex> lck(taskmutex);
+
+                        tasks.push(
                         [param = std::move(param)]() {
                             try {
                                 EpochLibrary->initPlayerCheck(
@@ -319,7 +327,9 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                             catch (...) {
                                 //TODO log?
                             }
-                        }).detach();
+                        });
+                        lck.unlock();
+                        notifier.notify_one();
                     }
                     else hiveOutput = SQF::RET_FAIL();
                 }
@@ -329,7 +339,6 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
         case '1': {
             // SET
             if (functionWithParam) {
-
 
                 switch (functionType) {
                 case '1': {
@@ -347,17 +356,20 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                         );
 #endif
 
-
-
                         if (asyncFlag == '0') {
 
                             hiveOutput = EpochLibrary->db->set(param1, param2);
                             
                         }
                         else {
-                            std::thread([param1 = std::move(param1), param2 = std::move(param2)]() {
+
+                            std::unique_lock<std::mutex> lck(taskmutex);
+
+                            tasks.push([param1 = std::move(param1), param2 = std::move(param2)]() {
                                 EpochLibrary->db->set(param1, param2);
-                            }).detach();
+                            });
+                            lck.unlock();
+                            notifier.notify_one();
                         }
                     }
                     else hiveOutput = SQF::RET_FAIL();
@@ -373,11 +385,15 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                             hiveOutput = EpochLibrary->db->setex(p1,p2,p3);
                         }
                         else {
-                            std::thread(
+                            std::unique_lock<std::mutex> lck(taskmutex);
+
+                            tasks.push(
                                 [p1=std::move(p1),p2=std::move(p2),p3=std::move(p3)]() {
                                     EpochLibrary->db->setex(p1,p2,p3);
                                 }
-                            ).detach();
+                            );
+                            lck.unlock();
+                            notifier.notify_one();
                         }
                     }
                     else hiveOutput = SQF::RET_FAIL();
@@ -393,11 +409,15 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                             hiveOutput = EpochLibrary->db->expire(param1, param2);
                         }
                         else {
-                            std::thread(
+                            std::unique_lock<std::mutex> lck(taskmutex);
+
+                            tasks.push(
                                 [param1 = std::move(param1), param2 = std::move(param2)]() {
                                     EpochLibrary->db->expire(param1, param2);
                                 }
-                            ).detach();
+                            );
+                            lck.unlock();
+                            notifier.notify_one();
                         }
                     }
                     else hiveOutput = SQF::RET_FAIL();
@@ -407,9 +427,13 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                     //SETBIT
                     std::string p1, p2, p3;
                     if (split3(functionParamsBegin, SEPARATOR_CHAR, p1, p2, p3)) {
-                        std::thread([p1=std::move(p1),p2 = std::move(p2),p3 = std::move(p3)]() {
+                        std::unique_lock<std::mutex> lck(taskmutex);
+
+                        tasks.push([p1=std::move(p1),p2 = std::move(p2),p3 = std::move(p3)]() {
                             EpochLibrary->db->setbit(p1,p2,p3);
-                        }).detach();
+                        });
+                        lck.unlock();
+                        notifier.notify_one();
                     }
                     break;
                 }
@@ -518,9 +542,13 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
             //DEL
             std::string p1;
             if (split1(functionParamsBegin, SEPARATOR_CHAR, p1)) {
-                std::thread([p1 = std::move(p1)](){
+                std::unique_lock<std::mutex> lck(taskmutex);
+
+                tasks.push([p1 = std::move(p1)](){
                     EpochLibrary->db->del(p1);
-                }).detach();
+                });
+                lck.unlock();
+                notifier.notify_one();
                 hiveOutput = "[1,\"1\"]";
             }
             else hiveOutput = SQF::RET_FAIL();
@@ -556,9 +584,13 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                 }
                 else {
                     // Async
-                    std::thread([p1 = std::move(p1),p2 = std::move(p2)]() {
+                    std::unique_lock<std::mutex> lck(taskmutex);
+
+                    tasks.push([p1 = std::move(p1),p2 = std::move(p2)]() {
                         EpochLibrary->db->log(p1, p2);
-                    }).detach();
+                    });
+                    lck.unlock();
+                    notifier.notify_one();
                 }
             }
             else hiveOutput = SQF::RET_FAIL();
@@ -579,9 +611,13 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                             );
                         }
                         else {
-                            std::thread([rawCmd = std::move(rawCmd)]() {
+                            std::unique_lock<std::mutex> lck(taskmutex);
+
+                            tasks.push([rawCmd = std::move(rawCmd)]() {
                                 EpochLibrary->updatePublicVariable(rawCmd);
-                            }).detach();
+                            });
+                            lck.unlock();
+                            notifier.notify_one();
                         }
                     }
                     else hiveOutput = SQF::RET_FAIL();
@@ -624,7 +660,9 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                             }
                         }
                         else {
-                            std::thread([p1 = std::move(p1),p2 = std::move(p2)]() {
+                            std::unique_lock<std::mutex> lck(taskmutex);
+
+                            tasks.push([p1 = std::move(p1),p2 = std::move(p2)]() {
                                 try {
                                     EpochLibrary->addBan(
                                         std::stoll(p1),
@@ -634,7 +672,9 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                                 catch (...) {
                                     //TODO log?
                                 }
-                            }).detach();
+                            });
+                            lck.unlock();
+                            notifier.notify_one();
                         }
                     }
                     else hiveOutput = SQF::RET_FAIL();
@@ -670,9 +710,13 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                 if (functionWithParam) {
                     std::string p1;
                     if (split1(functionParamsBegin, SEPARATOR_CHAR, p1)) {
-                        std::thread([p1 = std::move(p1)]() {
+                        std::unique_lock<std::mutex> lck(taskmutex);
+
+                        tasks.push([p1 = std::move(p1)]() {
                             EpochLibrary->beBroadcastMessage(p1);
-                        }).detach();
+                        });
+                        lck.unlock();
+                        notifier.notify_one();
                     }
                     else hiveOutput = SQF::RET_FAIL();
                 }
@@ -682,9 +726,13 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                 if (functionWithParam) {
                     std::string p1,p2;
                     if (split2(functionParamsBegin, SEPARATOR_CHAR, p1,p2)) {
-                        std::thread([p1 = std::move(p1),p2 = std::move(p2)]() {
+                        std::unique_lock<std::mutex> lck(taskmutex);
+
+                        tasks.push([p1 = std::move(p1),p2 = std::move(p2)]() {
                             EpochLibrary->beKick(p1,p2);
-                        }).detach();
+                        });
+                        lck.unlock();
+                        notifier.notify_one();
                     }
                     else hiveOutput = SQF::RET_FAIL();
                 }
@@ -694,9 +742,13 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                 if (functionWithParam) {
                     std::string p1,p2,p3;
                     if (split3(functionParamsBegin, SEPARATOR_CHAR, p1,p2,p3)) {
-                        std::thread([p1 = std::move(p1),p2 = std::move(p2),p3 = std::move(p3)]() {
+                        std::unique_lock<std::mutex> lck(taskmutex);
+
+                        tasks.push([p1 = std::move(p1),p2 = std::move(p2),p3 = std::move(p3)]() {
                             EpochLibrary->beBan(p1,p2,p3);
-                        }).detach();
+                        });
+                        lck.unlock();
+                        notifier.notify_one();
                     }
                     else hiveOutput = SQF::RET_FAIL();
                 }
@@ -706,24 +758,37 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
 
                 if (asyncFlag == '0') {
                     // Unlock
-                    std::thread([](){
+                    std::unique_lock<std::mutex> lck(taskmutex);
+
+                    tasks.push([](){
                         EpochLibrary->beUnlock();
-                    }).detach();
+                    });
+                    lck.unlock();
+                    notifier.notify_one();
                 }
                 else {
                     // Lock Server
-                    std::thread([](){ 
+                    std::unique_lock<std::mutex> lck(taskmutex);
+
+                    tasks.push([](){
                         EpochLibrary->beLock(); 
-                    }).detach();
+                    });
+                    lck.unlock();
+                    notifier.notify_one();
                 }
                 break;
             }
             case '9': {
                 // shutdown
-                std::thread(
+                std::unique_lock<std::mutex> lck(taskmutex);
+
+                tasks.push(
                 []() { 
                     EpochLibrary->beShutdown(); 
-                }).detach();
+                });
+
+                lck.unlock();
+                notifier.notify_one();
                 break;
             }
             }
@@ -743,6 +808,45 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
         }
     }
     else {
+
+        if (threadpool.empty()) {
+            unsigned int max_thread = std::thread::hardware_concurrency();
+            max_thread = max_thread > 3 ? 3 : max_thread; //I like 3 :)
+            for (unsigned int i = 0; i < max_thread; i++) {
+
+                threadpool.emplace_back(
+                    std::thread([&]() {
+
+                    //lock
+                    std::unique_lock<std::mutex> lck(taskmutex);
+
+                    do {
+
+
+                        //unlock and wait
+                        notifier.wait(lck);
+
+                        //locked again
+
+                        while (!tasks.empty()) {
+
+                            //grab a task
+                            auto fnc = std::move(tasks.front());
+                            tasks.pop();
+
+                            //do the task, not blocking anything else
+                            lck.unlock();
+                            fnc();
+                            lck.lock();
+
+                        }
+
+                    } while (!stop);
+
+                }));
+            };
+        }
+
         hiveOutput = "0.6.0.0";
     }
 
@@ -807,16 +911,23 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
         init();
         resultcache = std::vector<std::string>(10000,"");
         break;
-    };
+    }
     case DLL_THREAD_ATTACH: {
         break;
-    };
+    }
     case DLL_THREAD_DETACH: {
         break;
-    };
+    }
     case DLL_PROCESS_DETACH: {
+        stop = true;
+        notifier.notify_all();
+        for (size_t i = 0; i < threadpool.size(); i++){
+            if (threadpool[i].joinable()){
+                threadpool[i].join();
+            }
+        }
         break;
-    };
+    }
     }
 
     return TRUE;
