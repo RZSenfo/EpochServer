@@ -31,22 +31,22 @@ René Nyffenegger rene.nyffenegger@adp-gmbh.ch
 
 class Chameleon {
 public:
-	Chameleon() {};
-	explicit Chameleon(const std::string&);
-	explicit Chameleon(double);
-	explicit Chameleon(const char*);
+    Chameleon() {};
+    explicit Chameleon(const std::string&);
+    explicit Chameleon(double);
+    explicit Chameleon(const char*);
 
-	Chameleon(const Chameleon&);
-	Chameleon& operator=(Chameleon const&);
+    Chameleon(const Chameleon&);
+    Chameleon& operator=(Chameleon const&);
 
-	Chameleon& operator=(double);
-	Chameleon& operator=(std::string const&);
+    Chameleon& operator=(double);
+    Chameleon& operator=(std::string const&);
 
 public:
-	operator std::string() const;
-	operator double() const;
+    operator std::string() const;
+    operator double() const;
 private:
-	std::string value_;
+    std::string value_;
 };
 
 #endif

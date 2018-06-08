@@ -5,6 +5,14 @@
 
 thread_local bool is_mainthread = false;
 
+//SQL Injection checks
+//if you want to inject stuff from SQF you will need to break out the string for the table, key or value
+//tables and key are escaped in `, value in '
+//these never pop up in sqf by default, ' especially isnt wanted because it breaks parseSimpleArray
+//so we are safe if we exclude these chars from said strings
+#define CHECK_KEY(x) if (x.find('`') != std::string::npos /*|| x.find('´') != std::string::npos*/) return SQF::RET_FAIL();
+#define CHECK_VALUE(x) if (x.find('\'') != std::string::npos) return SQF::RET_FAIL();
+
 MySQLConnector::MySQLConnector() {
     
 }
@@ -59,7 +67,7 @@ bool transformKey(const std::string& _in, std::string& _table, std::string& _key
     return true;
 }
 
-std::string makeCreateTable(const std::string& tableName) {
+inline std::string makeCreateTable(const std::string& tableName) {
     return ("CREATE TABLE `" + tableName + "` (\
         `key` BIGINT(255) UNSIGNED NOT NULL,\
         `value` LONGTEXT NULL,\
@@ -74,7 +82,13 @@ bool MySQLConnector::createTable(MYSQL * con, const std::string& tablename) {
 
     std::string execQry = makeCreateTable(tablename);
 
-    return !mysql_real_query(con, execQry.c_str(), execQry.size());
+    if (!mysql_real_query(con, execQry.c_str(), execQry.size())) {
+        return true;
+    }
+    else {
+        this->config.logger->log("Could not create table: " + std::string(mysql_error(con)));
+        return false;
+    }
 
 };
 
@@ -105,21 +119,25 @@ bool MySQLConnector::init(EpochlibConfigDB _config) {
     if (mysql_select_db(this->mysql, this->config.dbIndex.c_str())) {
         
         //COULD NOT SELECT
+        this->config.logger->log("Could not select database in first try");
 
         //TRY TO CREATE DB
         std::string createQry = "CREATE DATABASE " + this->config.dbIndex;
         if (mysql_query(mysql, createQry.c_str())) {
+            this->config.logger->log("Could not create database");
             //COULD NOT CREATE
             mysql_close(mysql);
             return false;
         }
         else {
             //CREATED
+            this->config.logger->log("Database created");
         }
 
         //SELECTDB
         if (mysql_select_db(mysql, this->config.dbIndex.c_str())) {
             //COULD NOT SELECT
+            this->config.logger->log("Could not select database in second try");
             mysql_close(mysql);
             return false;
         }
@@ -127,6 +145,8 @@ bool MySQLConnector::init(EpochlibConfigDB _config) {
             //SELECTED
         }
     }
+
+    this->config.logger->log("Database selected!");
 
     return true;
 }
@@ -167,69 +187,72 @@ void MySQLConnector::closeCon(MYSQL * con) {
     }
 }
 
-std::pair<bool, std::string> MySQLConnector::__get(const std::string& _table, const std::string& _key) {
+bool MySQLConnector::__get(const std::string& _table, const std::string& _key, std::string& _result) {
     
-    std::pair<bool, std::string> _return = { false, "" };
     
     MYSQL * con = setupCon();
-    if (con == nullptr) return _return;
+    if (con == nullptr) {
+        this->config.logger->log("Could not setup database connection for call");
+        return false;
+    }
+    bool _success = false;
 
     std::string execQry = "SELECT value FROM `" + _table + "` WHERE `key`='" + _key + "' AND (`ttl` IS NULL OR `ttl` > CURRENT_TIMESTAMP())";
 
     if (!mysql_real_query(con, execQry.c_str(), execQry.size())) {
 
-        MYSQL_RES * _result = NULL;
-        _result = mysql_store_result(con);
+        MYSQL_RES * _mresult = NULL;
+        _mresult = mysql_store_result(con);
 
-        if (!_result) {
+        if (!_mresult) {
 
             //handle empty result
-            _return.first = true;
+            _success = true;
 
         }
         else {
 
             //num cols
-            unsigned int fieldcount = mysql_num_fields(_result);
+            unsigned int fieldcount = mysql_num_fields(_mresult);
 
             //num rows
-            unsigned long long int rowcount = mysql_num_rows(_result);
+            unsigned long long int rowcount = mysql_num_rows(_mresult);
 
             if (!fieldcount || !rowcount) {
 
                 //handle empty result
-                _return.first = true;
+                _success = true;
 
             }
             else {
 
                 //we only gonna fetch one row (there shouldnt be multiple)
                 //MYSQL_FIELD * fields = mysql_fetch_fields(_result); //TODO should we add type checking for the key?..
-                MYSQL_ROW row = mysql_fetch_row(_result);
+                MYSQL_ROW row = mysql_fetch_row(_mresult);
 
-                _return.first = true;
+                _success = true;
                 auto _pos = row[0];
                 if (_pos == NULL) {
                     //NULL == nil
-                    _return.second = "nil";
+                    _result = "nil";
                 }
                 else {
-                    _return.second = _pos;
+                    _result = _pos;
                 }
 
             }
 
-            mysql_free_result(_result);
+            mysql_free_result(_mresult);
 
         }
 
     }
     else {
-        
+        this->config.logger->log("Call failed: " + std::string(mysql_error(con)));
     }
 
     closeCon(con);
-    return _return;
+    return _success;
 }
 
 std::string MySQLConnector::get(const std::string& _key) {
@@ -238,13 +261,19 @@ std::string MySQLConnector::get(const std::string& _key) {
     std::string key;
     bool success = transformKey(_key, table, key);
 
-    if (!success) return SQF::RET_FAIL();
+    if (!success) {
+        this->config.logger->log("Could not transfrom key");
+        return SQF::RET_FAIL();
+    }
 
-    //TODO check table and key for single qoutes and escape/change them .. or throw an error because they shouldnt be there anyways
+    //injection checks
+    CHECK_KEY(table);
+    CHECK_KEY(key);
 
-    auto _result = __get(table,_key);
+    std::string result;
+    auto _success = __get(table,key,result);
 
-    if(!_result.first) {
+    if(!_success) {
         //handle the error (TODO might need to create the table)
         return SQF::RET_FAIL();
     }
@@ -252,11 +281,11 @@ std::string MySQLConnector::get(const std::string& _key) {
 
         SQF returnSqf;
         returnSqf.push_number(SQF_RETURN_STATUS::SUCCESS);
-        if (_result.second.empty() || _result.second[0] != '[') {
-            returnSqf.push_str(_result.second.c_str(),1);
+        if (result.empty() || result[0] != '[') {
+            returnSqf.push_str(result);
         }
         else {
-            returnSqf.push_array(_result.second);
+            returnSqf.push_array(result);
         }
         return returnSqf.toArray();
     }
@@ -271,13 +300,19 @@ std::string MySQLConnector::getTtl(const std::string& _key) {
     bool success = transformKey(_key, table, key);
 
     if (!success) {
+        this->config.logger->log("Could not transfrom key");
         return SQF::RET_FAIL();
     }
 
-    //TODO scan table and key
+    //injection checks
+    CHECK_KEY(table);
+    CHECK_KEY(key);
 
     MYSQL * con = setupCon();
-    if (con == nullptr) return SQF::RET_FAIL();
+    if (con == nullptr) {
+        this->config.logger->log("Could not setup database connection for call");
+        return SQF::RET_FAIL();
+    }
 
     std::string execQry = "SELECT `value`, UNIX_TIMESTAMP(`ttl`), UNIX_TIMESTAMP(CURRENT_TIMESTAMP()) FROM `" + table + "` WHERE `key`='" + key + "' AND (`ttl` IS NULL OR `ttl` > CURRENT_TIMESTAMP())";
 
@@ -327,7 +362,7 @@ std::string MySQLConnector::getTtl(const std::string& _key) {
                 }
                 else {
                     try {
-                        returnSQF.push_number(std::stoll(_ttl) - std::stoll(_cts));
+                        returnSQF.push_number(std::atoll(_ttl) - std::atoll(_cts));
                     }
                     catch (...) {
                         returnSQF.push_number(-1);
@@ -349,6 +384,7 @@ std::string MySQLConnector::getTtl(const std::string& _key) {
 
     }
     else {
+        this->config.logger->log("Call failed: " + std::string(mysql_error(con)));
         returnSQF.push_number(SQF_RETURN_STATUS::FAIL);
     }
 
@@ -363,19 +399,26 @@ std::string MySQLConnector::set(const std::string& _key, const std::string& _val
     bool success = transformKey(_key, table, key);
     
     if (!success) {
+        this->config.logger->log("Could not transfrom key");
         return SQF::RET_FAIL();
     }
 
-    //TODO scan table, key, _value2 for injections
+    //injection checks
+    CHECK_KEY(table);
+    CHECK_KEY(key);
+    CHECK_VALUE(_value);
     
     MYSQL * con = setupCon();
-    if (con == nullptr) return SQF::RET_FAIL();
+    if (con == nullptr) {
+        this->config.logger->log("Could not setup database connection for call");
+        return SQF::RET_FAIL();
+    }
 
     std::string execQry = "INSERT INTO `" + table + "`(`key`,`value`)VALUES('" + key + "', '" + _value + "') ON DUPLICATE KEY UPDATE value = VALUES(value)";
 
     if (!mysql_real_query(con, execQry.c_str(), execQry.size())) {
-        return SQF::RET_SUCCESS();
         closeCon(con);
+        return SQF::RET_SUCCESS();
     }
     else {
 
@@ -383,11 +426,12 @@ std::string MySQLConnector::set(const std::string& _key, const std::string& _val
         createTable(con, table);
 
         if (!mysql_real_query(con, execQry.c_str(), execQry.size())) {
-            return SQF::RET_SUCCESS();
             closeCon(con);
+            return SQF::RET_SUCCESS();
         }
         else {
             //DIdnt work again
+            this->config.logger->log("Call failed: " + std::string(mysql_error(con)));
             closeCon(con);
             return SQF::RET_FAIL();
         }
@@ -403,20 +447,27 @@ std::string MySQLConnector::setex(const std::string& _key, const std::string& _t
     bool success = transformKey(_key, table, key);
 
     if (!success) {
+        this->config.logger->log("Could not transfrom key");
         return SQF::RET_FAIL();
     }
 
-    //TODO scan table, key, _value3 for injections
+    //injection checks
+    CHECK_KEY(table);
+    CHECK_KEY(key);
+    CHECK_VALUE(_value);
 
 
     MYSQL * con = setupCon();
-    if (con == nullptr) return SQF::RET_FAIL();
+    if (con == nullptr) {
+        this->config.logger->log("Could not setup database connection for call");
+        return SQF::RET_FAIL();
+    }
 
     std::string execQry = "INSERT INTO `" + table + "`(`key`,`value`,`ttl`)VALUES('" + key + "','" + _value + "',DATE_ADD(NOW(),INTERVAL "+ _ttl +" SECOND)) ON DUPLICATE KEY UPDATE value = VALUES(value), ttl = VALUES(ttl)";
 
     if (!mysql_real_query(con, execQry.c_str(), execQry.size())) {
-        return SQF::RET_SUCCESS();
         closeCon(con);
+        return SQF::RET_SUCCESS();
     }
     else {
         
@@ -424,11 +475,13 @@ std::string MySQLConnector::setex(const std::string& _key, const std::string& _t
         createTable(con, table);
 
         if (!mysql_real_query(con, execQry.c_str(), execQry.size())) {
-            return SQF::RET_SUCCESS();
             closeCon(con);
+            return SQF::RET_SUCCESS();
         }
         else {
             //DIdnt work again
+            this->config.logger->log("Call failed: " + std::string(mysql_error(con)));
+
             closeCon(con);
             return SQF::RET_FAIL();
         }
@@ -444,41 +497,65 @@ std::string MySQLConnector::expire(const std::string& _key, const std::string& _
     bool success = transformKey(_key, table, key);
 
     if (!success) {
+        this->config.logger->log("Could not transfrom key");
         return SQF::RET_FAIL();
     }
     
-    //TODO scan table, key, _value2 for injections
+    //injection checks
+    CHECK_KEY(table);
+    CHECK_KEY(key);
+    CHECK_VALUE(_ttl);
+    /* TODO CHECK if thats needed
+    try {
+        long long save_var = std::stoll(_ttl);
+    }
+    catch (...) {
+        return SQF::RET_FAIL();
+    }
+    */
     
     MYSQL * con = setupCon();
-    if (con == nullptr) return SQF::RET_FAIL();
+    if (con == nullptr) {
+        this->config.logger->log("Could not setup database connection for call");
+        return SQF::RET_FAIL();
+    }
 
-    std::string execQry = "INSERT INTO `" + table + "`(`key`,`value`,`tll`)VALUES('" + key + "','',DATE_ADD(NOW(),INTERVAL " + _ttl + " SECOND)) ON DUPLICATE KEY UPDATE ttl = VALUES(ttl)";
+    std::string execQry = "INSERT INTO `" + table + "`(`key`,`value`,`ttl`)VALUES('" + key + "','',DATE_ADD(NOW(),INTERVAL " + _ttl + " SECOND)) ON DUPLICATE KEY UPDATE ttl = VALUES(ttl)";
 
     if (!mysql_real_query(con, execQry.c_str(), execQry.size())) {
-        return SQF::RET_SUCCESS();
         closeCon(con);
+        return SQF::RET_SUCCESS();
     }
     else {
         
+        this->config.logger->log("Call failed: " + std::string(mysql_error(con)) + "\n Trying to create table.");
+
         //try to create table and retry
-        createTable(con, table);
+        if (createTable(con, table)) {
 
-        if (!mysql_real_query(con, execQry.c_str(), execQry.size())) {
-            return SQF::RET_SUCCESS();
-            closeCon(con);
-        }
-        else {
-            //DIdnt work again
-            closeCon(con);
-            return SQF::RET_FAIL();
+            if (!mysql_real_query(con, execQry.c_str(), execQry.size())) {
+                closeCon(con);
+                return SQF::RET_SUCCESS();
+            }
+            else {
+                //Didnt work again
+                this->config.logger->log("Call failed: " + std::string(mysql_error(con)));
+
+                closeCon(con);
+                return SQF::RET_FAIL();
+            }
         }
 
+        return SQF::RET_FAIL();
     }
 }
 
 std::string MySQLConnector::setbit(const std::string& _key, const std::string& _bitindex, const std::string& _value) {
     
-    if (_value.empty()) return SQF::RET_FAIL();
+    if (_value.empty()) {
+        this->config.logger->log("SetBIT had empty value");
+        return SQF::RET_FAIL();
+    }
 
     int bitIndex = -1;
     try {
@@ -487,6 +564,7 @@ std::string MySQLConnector::setbit(const std::string& _key, const std::string& _
     catch (...) {}
     
     if (bitIndex < 0) {
+        this->config.logger->log("BitIndex was less than 0");
         return SQF::RET_FAIL();
     }
 
@@ -495,16 +573,21 @@ std::string MySQLConnector::setbit(const std::string& _key, const std::string& _
     bool success = transformKey(_key, table, key);
 
     if (!success) {
+        this->config.logger->log("Could not transfrom key");
         return SQF::RET_FAIL();
     }
 
-    //TODO scan table, key, _value2 for injections
+    //injection checks
+    CHECK_KEY(table);
+    CHECK_KEY(key);
+    CHECK_VALUE(_value);
 
-    auto _result = __get(table, _key);
+    std::string result;
+    auto _success = __get(table, key, result);
 
     std::string bitstring;
-    if (_result.first) {
-        bitstring = _result.second;
+    if (_success) {
+        bitstring = result;
     }
 
     if (bitstring.size() > bitIndex) {
@@ -519,14 +602,17 @@ std::string MySQLConnector::setbit(const std::string& _key, const std::string& _
     }
 
     MYSQL * con = setupCon();
-    if (con == nullptr) return SQF::RET_FAIL();
+    if (con == nullptr) {
+        this->config.logger->log("Could not setup database connection for call");
+        return SQF::RET_FAIL();
+    }
 
 
     std::string execQry = "INSERT INTO `" + table + "`(`key`,`value`)VALUES('" + key + "', '" + bitstring + "') ON DUPLICATE KEY UPDATE value = VALUES(value)";
 
     if (!mysql_real_query(con, execQry.c_str(), execQry.size())) {
-        return SQF::RET_SUCCESS();
         closeCon(con);
+        return SQF::RET_SUCCESS();
     }
     else {
        
@@ -534,11 +620,12 @@ std::string MySQLConnector::setbit(const std::string& _key, const std::string& _
         createTable(con, table);
 
         if (!mysql_real_query(con, execQry.c_str(), execQry.size())) {
-            return SQF::RET_SUCCESS();
             closeCon(con);
+            return SQF::RET_SUCCESS();
         }
         else {
             //DIdnt work again
+            this->config.logger->log("Call failed: " + std::string(mysql_error(con)));
             closeCon(con);
             return SQF::RET_FAIL();
         }
@@ -556,24 +643,31 @@ std::string MySQLConnector::getbit(const std::string& _key, const std::string& _
     }
     catch (...) {};
 
-    if (bitIndex < 0) return SQF::RET_FAIL();
+    if (bitIndex < 0) {
+        this->config.logger->log("Get Bit Index was negative");
+        return SQF::RET_FAIL();
+    }
 
     std::string table;
     std::string key;
     bool success = transformKey(_key, table, key);
 
     if (!success) {
+        this->config.logger->log("Could not transfrom key");
         return SQF::RET_FAIL();
     }
 
-    //TODO scan table, key, _value for injections
+    //injection checks
+    CHECK_KEY(table);
+    CHECK_KEY(key);
 
-    auto _return = __get(table, key);
+    std::string result;
+    auto _success = __get(table, key, result);
 
-    if (_return.first) {
+    if (_success) {
         SQF returnSQF;
         returnSQF.push_number(SQF_RETURN_STATUS::SUCCESS);
-        returnSQF.push_str(_return.second.size() > bitIndex ? "" + _return.second[bitIndex] : "0");
+        returnSQF.push_str(result.size() > bitIndex ? (std::string({ result[bitIndex] })) : "0");
         return returnSQF.toArray();
     }
     else {
@@ -588,20 +682,24 @@ std::string MySQLConnector::exists(const std::string& _key) {
     std::string key;
     bool success = transformKey(_key, table, key);
 
-    if (!success) return SQF::RET_FAIL();
+    if (!success) {
+        this->config.logger->log("Could not transfrom key");
+        return SQF::RET_FAIL();
+    }
 
-    //TODO check table and key for single qoutes and escape/change them .. or throw an error because they shouldnt be there anyways
+    //injection checks
+    CHECK_KEY(table);
+    CHECK_KEY(key);
 
-    auto _result = __get(table, _key);
+    std::string result;
+    auto _success = __get(table, key, result);
 
-    if (!_result.first || _result.second.empty()) {
+    if (!_success || result.empty()) {
         //handle the error (TODO might need to create the table)
         return SQF::RET_FAIL();
     }
     else {
-
         return SQF::RET_SUCCESS();
-
     }
 
 }
@@ -612,20 +710,31 @@ std::string MySQLConnector::del(const std::string& _key) {
     std::string key;
     bool success = transformKey(_key, table, key);
 
-    if (!success) return SQF::RET_FAIL();
+    if (!success) {
+        this->config.logger->log("Could not transfrom key");
+        return SQF::RET_FAIL();
+    }
 
-    //TODO check table and key for single qoutes and escape/change them .. or throw an error because they shouldnt be there anyways
+    //injection checks
+    CHECK_KEY(table);
+    CHECK_KEY(key);
 
     MYSQL * con = setupCon();
-    if (con == nullptr) return SQF::RET_FAIL();
+    if (con == nullptr) {
+        this->config.logger->log("Could not setup database connection for call");
+        return SQF::RET_FAIL();
+    }
 
     std::string execQry = "DELETE FROM `" + table + "` WHERE `key`='" + key + "'";
 
     if (!mysql_real_query(con, execQry.c_str(), execQry.size())) {
         closeCon(con);
-        return SQF::RET_SUCCESS();
+        
+        //TODO Return Rows affected
+        return "[1,\"1\"]";
     }
     else {
+        this->config.logger->log("Call failed: " + std::string(mysql_error(con)));
         closeCon(con);
         return SQF::RET_FAIL();
     }
@@ -635,7 +744,10 @@ std::string MySQLConnector::del(const std::string& _key) {
 std::string MySQLConnector::ping() {
     
     MYSQL * con = setupCon();
-    if (con == nullptr) return SQF::RET_FAIL();
+    if (con == nullptr) {
+        this->config.logger->log("Could not setup database connection for call");
+        return SQF::RET_FAIL();
+    }
 
     if (mysql_ping(con)) {
         closeCon(con);
@@ -650,7 +762,7 @@ std::string MySQLConnector::ping() {
 
 std::string MySQLConnector::lpopWithPrefix(const std::string& _prefix, const std::string& _key) {
     
-    //NOT POSSIBLE IN MYSQL (ALSO NOT USED)
+    //NOT NEEDED
     return SQF::RET_FAIL();
 
 }
@@ -662,13 +774,19 @@ std::string MySQLConnector::ttl(const std::string& _key) {
     bool success = transformKey(_key, table, key);
 
     if (!success) {
+        this->config.logger->log("Could not transfrom key"); 
         return SQF::RET_FAIL();
     }
 
-    //TODO scan table and key
+    //injection checks
+    CHECK_KEY(table);
+    CHECK_KEY(key);
 
     MYSQL * con = setupCon();
-    if (con == nullptr) return SQF::RET_FAIL();
+    if (con == nullptr) {
+        this->config.logger->log("Could not setup database connection for call");
+        return SQF::RET_FAIL();
+    }
 
     std::string execQry = "SELECT UNIX_TIMESTAMP(`ttl`), UNIX_TIMESTAMP(CURRENT_TIMESTAMP()) FROM `" + table + "` WHERE `key`='" + key + "' AND (`ttl` IS NULL OR `ttl` > CURRENT_TIMESTAMP())";
 
@@ -731,6 +849,7 @@ std::string MySQLConnector::ttl(const std::string& _key) {
 
     }
     else {
+        this->config.logger->log("Call failed: " + std::string(mysql_error(con)));
         returnSQF.push_number(SQF_RETURN_STATUS::FAIL);
     }
 
@@ -744,9 +863,9 @@ std::string MySQLConnector::log(const std::string& _key, const std::string& _val
     time_t t = time(0);
     struct tm * currentTime = localtime(&t);
 
-    strftime(formatedTime, 64, "%Y-%m-%d %H:%M:%S ", currentTime);
+    strftime(formatedTime, 64, ":%Y%m%d%H%M%S", currentTime);
 
-    return set("LOG:"+_key, std::string(formatedTime) + " " + _value);
+    return set(_key+formatedTime, _value);
 
 }
 
@@ -754,7 +873,10 @@ std::string MySQLConnector::log(const std::string& _key, const std::string& _val
 std::string MySQLConnector::increaseBancount() {
     
     MYSQL * con = setupCon();
-    if (con == nullptr) return SQF::RET_FAIL();
+    if (con == nullptr) {
+        this->config.logger->log("Could not setup database connection for call");
+        return SQF::RET_FAIL();
+    }
 
     std::string execQry = "INSERT INTO `AH`(`key`,`value`)VALUES('bcnt','1') ON DUPLICATE KEY UPDATE value = value + VALUES(value)";
 
@@ -773,6 +895,7 @@ std::string MySQLConnector::increaseBancount() {
         }
         else {
             //DIdnt work again
+            this->config.logger->log("Call failed: " + std::string(mysql_error(con)));
             closeCon(con);
             return SQF::RET_FAIL();
         }

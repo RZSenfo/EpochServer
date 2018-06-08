@@ -16,7 +16,7 @@ private:
     MYSQL * setupCon();
     void closeCon(MYSQL * con);
     
-    std::pair<bool,std::string> __get(const std::string& table, const std::string& _key);
+    bool __get(const std::string& table, const std::string& _key, std::string& _result);
 
     bool createTable(MYSQL * con, const std::string& tablename);
 

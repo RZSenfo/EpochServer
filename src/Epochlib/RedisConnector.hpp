@@ -18,20 +18,20 @@ struct redisContext; //forward declare
 
 class RedisConnector : public DBConnector {
 private:
-	EpochlibConfigDB config;
+    EpochlibConfigDB config;
 
-	std::mutex contextMutex;
-	redisContext *context;
+    std::mutex contextMutex;
+    redisContext *context;
 
     pcre * setValueRegex;
 
-	void _reconnect(bool force);
+    void _reconnect(bool force);
 
-	EpochlibDBExecute execute(const char *RedisCommand, ...);
+    EpochlibDBExecute execute(const char *RedisCommand, ...);
 
 public:
-	RedisConnector();
-	~RedisConnector();
+    RedisConnector();
+    ~RedisConnector();
 
     bool init(EpochlibConfigDB Config);
 

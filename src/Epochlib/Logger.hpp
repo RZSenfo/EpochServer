@@ -1,15 +1,20 @@
-#include <string>
-
 #ifndef __LOGGER_H__
 #define __LOGGER_H__
 
+#include <fstream>
+#include <ctime>
+#include <iomanip>
+#include <string>
+
 class Logger {
 private:
-	std::string logFile;
+    std::string logFileName;
+    std::ofstream logFile;
 
 public:
-	Logger(std::string LogFile);
-	void log(std::string Message);
+    Logger(const std::string& LogFile);
+    ~Logger();
+    void log(const std::string& Message);
 };
 
 #endif

@@ -20,26 +20,26 @@ enum SQF_RETURN_STATUS {
 
 class SQF {
 private:
-	std::vector<std::string> arrayStack;
+    std::string arrayStack = "[";
 
 public:
-	SQF();
-	~SQF();
+    SQF();
+    ~SQF();
     void push_empty_str();
     void push_nil();
-	void push_str(const char *String, int Flag = 0);
+    void push_str(const char *String, int Flag = 0);
     void push_str(const std::string& String, int Flag = 0);
-	void push_number(long long int Number);
-	void push_number(const char *Number, size_t NumberSize);
-	void push_array(const char *String);
-	void push_array(const std::string& String);
-	std::string toArray();
+    void push_number(long long int Number);
+    void push_number(const char *Number, size_t NumberSize);
+    void push_array(const char *String);
+    void push_array(const std::string& String);
+    std::string toArray();
 
-    static std::string RET_FAIL() {
+    static inline std::string RET_FAIL() {
         return "[0]";
     }
 
-    static std::string RET_SUCCESS() {
+    static inline std::string RET_SUCCESS() {
         return "[1]";
     }
 };

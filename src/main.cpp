@@ -1,14 +1,14 @@
 #include "Epochlib/Epochlib.hpp"
 #ifdef WIN32
-	#include <windows.h>
+    #include <windows.h>
     #include <shellapi.h>    //get command line argsW
 
-	EXTERN_C IMAGE_DOS_HEADER __ImageBase;
+    EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #else
-	#include <fcntl.h>
-	#include <limits.h>
-	#include <unistd.h>
-	#include <string.h>
+    #include <fcntl.h>
+    #include <limits.h>
+    #include <unistd.h>
+    #include <string.h>
 #endif
 #include <sstream>
 #include <fstream>
@@ -23,7 +23,7 @@
 
 #ifdef WIN32
 extern "C" {
-	__declspec (dllexport) void __stdcall RVExtension(char *output, int outputSize, char *function);
+    __declspec (dllexport) void __stdcall RVExtension(char *output, int outputSize, char *function);
 }
 #else
 extern "C" {
@@ -152,12 +152,12 @@ bool split4(const std::string&s, const char& delim, std::string& param1, std::st
 }
 
 void split(const std::string &s, char delim, std::vector<std::string>& elems) {
-	std::stringstream ss(s);
-	std::string item;
+    std::stringstream ss(s);
+    std::string item;
     elems.reserve(5);
-	while (std::getline(ss, item, delim)) {
-		elems.emplace_back(item);
-	}
+    while (std::getline(ss, item, delim)) {
+        elems.emplace_back(item);
+    }
 }
 
 void makeStringFromLongString(const char *s, std::string& func) {
@@ -191,55 +191,55 @@ std::string ws2s(const std::wstring& wstr) {
 
 
 std::string getProfileFolder() {
-	std::string profileFolder = "";
-	int numCmdLineArgs = 0;
-	std::vector<std::string> commandLine;
+    std::string profileFolder = "";
+    int numCmdLineArgs = 0;
+    std::vector<std::string> commandLine;
 
 #ifdef WIN32
 
-	LPCWSTR cmdLine = GetCommandLineW();
-	LPWSTR *cmdLineArgs = CommandLineToArgvW(cmdLine, &numCmdLineArgs);
+    LPCWSTR cmdLine = GetCommandLineW();
+    LPWSTR *cmdLineArgs = CommandLineToArgvW(cmdLine, &numCmdLineArgs);
 
-	commandLine.reserve(numCmdLineArgs);
+    commandLine.reserve(numCmdLineArgs);
 
-	for (int i = 0; i < numCmdLineArgs; i++) {
-		std::wstring args(cmdLineArgs[i]);
-		std::string utf8 = ws2s(args);
-		commandLine.push_back(utf8);
-	}
+    for (int i = 0; i < numCmdLineArgs; i++) {
+        std::wstring args(cmdLineArgs[i]);
+        std::string utf8 = ws2s(args);
+        commandLine.push_back(utf8);
+    }
 
 #else
-	std::stringstream cmdlinePath;
-	cmdlinePath << "/proc/" << (int)getpid() << "/cmdline";
-	int cmdlineFile = open(cmdlinePath.str().c_str(), O_RDONLY);
+    std::stringstream cmdlinePath;
+    cmdlinePath << "/proc/" << (int)getpid() << "/cmdline";
+    int cmdlineFile = open(cmdlinePath.str().c_str(), O_RDONLY);
 
-	char cmdLineArgs[PATH_MAX];
-	if ((numCmdLineArgs = read(cmdlineFile, cmdLineArgs, PATH_MAX)) > 0) {
-		std::string procCmdline;
-		procCmdline.assign(cmdLineArgs, numCmdLineArgs - 1);
-		commandLine = split(procCmdline, '\0');
-	}
+    char cmdLineArgs[PATH_MAX];
+    if ((numCmdLineArgs = read(cmdlineFile, cmdLineArgs, PATH_MAX)) > 0) {
+        std::string procCmdline;
+        procCmdline.assign(cmdLineArgs, numCmdLineArgs - 1);
+        commandLine = split(procCmdline, '\0');
+    }
 #endif
 
-	for (std::vector<std::string>::iterator it = commandLine.begin(); it != commandLine.end(); it++) {
-		std::string starter = "-profiles=";
-		if (it->length() < starter.length()) {
-			continue;
-		}
+    for (std::vector<std::string>::iterator it = commandLine.begin(); it != commandLine.end(); it++) {
+        std::string starter = "-profiles=";
+        if (it->length() < starter.length()) {
+            continue;
+        }
 
-		std::string compareMe = it->substr(0, starter.length());
-		if (compareMe.compare(starter) != 0) {
-			continue;
-		}
+        std::string compareMe = it->substr(0, starter.length());
+        if (compareMe.compare(starter) != 0) {
+            continue;
+        }
 
-		profileFolder = it->substr(compareMe.length());
-	}
+        profileFolder = it->substr(compareMe.length());
+    }
 
-	return profileFolder;
+    return profileFolder;
 }
 
 std::string join(const std::shared_ptr<std::vector<std::string>>& split, int index) {
-	std::stringstream joinedString;
+    std::stringstream joinedString;
 
     //fetch the only one without seperator before
     //removes n-1 checks + possibly better loop unrolling
@@ -250,16 +250,16 @@ std::string join(const std::shared_ptr<std::vector<std::string>>& split, int ind
         it++;
     }
 
-	for (; it != end; it++) {
-		joinedString << SEPARATOR << *it;
-	}
+    for (; it != end; it++) {
+        joinedString << SEPARATOR << *it;
+    }
 
-	return joinedString.str();
+    return joinedString.str();
 }
 
 
 /*
-	RVExtension (Extension main call)
+    RVExtension (Extension main call)
 */
 #ifdef WIN32
 void __stdcall RVExtension(char *_output, int _outputSize, char *_function) {
@@ -289,8 +289,8 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
     );
 #endif
 
-	if (functionLen) {
-		
+    if (functionLen) {
+        
         char callPrefix = _function[0];
         char functionType = _function[1];
         char asyncFlag = _function[2];
@@ -310,7 +310,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                     std::string param;
                     if (split1(functionParamsBegin,SEPARATOR_CHAR,param)) {
                         std::thread(
-                        [param]() {
+                        [param = std::move(param)]() {
                             try {
                                 EpochLibrary->initPlayerCheck(
                                     std::stoll(param)
@@ -355,7 +355,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                             
                         }
                         else {
-                            std::thread([param1, param2]() {
+                            std::thread([param1 = std::move(param1), param2 = std::move(param2)]() {
                                 EpochLibrary->db->set(param1, param2);
                             }).detach();
                         }
@@ -374,7 +374,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                         }
                         else {
                             std::thread(
-                                [p1,p2,p3]() {
+                                [p1=std::move(p1),p2=std::move(p2),p3=std::move(p3)]() {
                                     EpochLibrary->db->setex(p1,p2,p3);
                                 }
                             ).detach();
@@ -394,7 +394,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                         }
                         else {
                             std::thread(
-                                [param1, param2]() {
+                                [param1 = std::move(param1), param2 = std::move(param2)]() {
                                     EpochLibrary->db->expire(param1, param2);
                                 }
                             ).detach();
@@ -407,7 +407,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                     //SETBIT
                     std::string p1, p2, p3;
                     if (split3(functionParamsBegin, SEPARATOR_CHAR, p1, p2, p3)) {
-                        std::thread([p1,p2,p3]() {
+                        std::thread([p1=std::move(p1),p2 = std::move(p2),p3 = std::move(p3)]() {
                             EpochLibrary->db->setbit(p1,p2,p3);
                         }).detach();
                     }
@@ -518,7 +518,10 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
             //DEL
             std::string p1;
             if (split1(functionParamsBegin, SEPARATOR_CHAR, p1)) {
-                hiveOutput = EpochLibrary->db->del(p1);
+                std::thread([p1 = std::move(p1)](){
+                    EpochLibrary->db->del(p1);
+                }).detach();
+                hiveOutput = "[1,\"1\"]";
             }
             else hiveOutput = SQF::RET_FAIL();
             break;
@@ -553,7 +556,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                 }
                 else {
                     // Async
-                    std::thread([p1,p2]() {
+                    std::thread([p1 = std::move(p1),p2 = std::move(p2)]() {
                         EpochLibrary->db->log(p1, p2);
                     }).detach();
                 }
@@ -576,7 +579,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                             );
                         }
                         else {
-                            std::thread([rawCmd]() {
+                            std::thread([rawCmd = std::move(rawCmd)]() {
                                 EpochLibrary->updatePublicVariable(rawCmd);
                             }).detach();
                         }
@@ -621,7 +624,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                             }
                         }
                         else {
-                            std::thread([p1,p2]() {
+                            std::thread([p1 = std::move(p1),p2 = std::move(p2)]() {
                                 try {
                                     EpochLibrary->addBan(
                                         std::stoll(p1),
@@ -667,7 +670,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                 if (functionWithParam) {
                     std::string p1;
                     if (split1(functionParamsBegin, SEPARATOR_CHAR, p1)) {
-                        std::thread([p1]() {
+                        std::thread([p1 = std::move(p1)]() {
                             EpochLibrary->beBroadcastMessage(p1);
                         }).detach();
                     }
@@ -679,7 +682,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                 if (functionWithParam) {
                     std::string p1,p2;
                     if (split2(functionParamsBegin, SEPARATOR_CHAR, p1,p2)) {
-                        std::thread([p1,p2]() {
+                        std::thread([p1 = std::move(p1),p2 = std::move(p2)]() {
                             EpochLibrary->beKick(p1,p2);
                         }).detach();
                     }
@@ -691,7 +694,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                 if (functionWithParam) {
                     std::string p1,p2,p3;
                     if (split3(functionParamsBegin, SEPARATOR_CHAR, p1,p2,p3)) {
-                        std::thread([p1,p2,p3]() {
+                        std::thread([p1 = std::move(p1),p2 = std::move(p2),p3 = std::move(p3)]() {
                             EpochLibrary->beBan(p1,p2,p3);
                         }).detach();
                     }
@@ -738,10 +741,10 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
             //hiveOutput = "Unkown command " + rawCmd[0] + " Max hiveOutput " + OStext;
         }
         }
-	}
-	else {
-		hiveOutput = "0.6.0.0";
-	}
+    }
+    else {
+        hiveOutput = "0.6.0.0";
+    }
 
 #ifdef DEV_DEBUG
     std::stringstream outstream;
@@ -762,12 +765,12 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
         current_id++;
     }
 
-	strncpy(_output, hiveOutput.c_str(), _outputSize);
+    strncpy(_output, hiveOutput.c_str(), _outputSize);
     
-	#ifdef __linux__
-		_output[_outputSize - 1] = '\0';
-		return;
-	#endif
+    #ifdef __linux__
+        _output[_outputSize - 1] = '\0';
+        return;
+    #endif
 }
 
 

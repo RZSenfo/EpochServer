@@ -4,12 +4,12 @@ project(epochserver)
 
 #check for correct version of MSVC
 if("${CMAKE_GENERATOR}" MATCHES "Visual Studio 15 2017 Win64")
-	set( CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} /std:c++latest" )
-	set( USE_64BIT_BUILD ON) #since linux doesnt support 64 bit anyways
+    set( CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} /std:c++latest" )
+    set( USE_64BIT_BUILD ON) #since linux doesnt support 64 bit anyways
 elseif("${CMAKE_GENERATOR}" MATCHES "Visual Studio 15 2017")
-	set( CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} /std:c++latest" )
+    set( CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} /std:c++latest" )
 elseif("${CMAKE_CXX_COMPILER_ID}" MATCHES "MSVC")
-	message(FATAL_ERROR "ERROR: You need a C++17 compatible compiler")
+    message(FATAL_ERROR "ERROR: You need a C++17 compatible compiler")
 endif()
 
 add_definitions(/D_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS) #No I don't cheat!
@@ -21,12 +21,12 @@ file(GLOB_RECURSE SOURCES src/*.cpp src/*.hpp)
 file(GLOB_RECURSE SOURCES_HTTP deps/happyhttp/happyhttp.cpp deps/happyhttp/*.h)
 
 if (WIN32)
-	SET(LIBS ${LIBS} ws2_32 hiredis win32_interop)
-	if (USE_64BIT_BUILD)
-		link_directories( deps/hiredis/msvs/vs-solutions/vs2015/bin/x64/Release )
-	else()
-		link_directories( deps/hiredis/msvs/vs-solutions/vs2015/bin/x86/Release )
-	endif()
+    SET(LIBS ${LIBS} ws2_32 hiredis win32_interop)
+    if (USE_64BIT_BUILD)
+        link_directories( deps/hiredis/msvs/vs-solutions/vs2015/bin/x64/Release )
+    else()
+        link_directories( deps/hiredis/msvs/vs-solutions/vs2015/bin/x86/Release )
+    endif()
 endif()
 
 #include external headers
@@ -35,14 +35,14 @@ include_directories(deps/happyhttp)
 
 
 if (USE_64BIT_BUILD)
-	set(EXECUTABLE_NAME "epochserver_x64")
+    set(EXECUTABLE_NAME "epochserver_x64")
 else()
-	set(EXECUTABLE_NAME "epochserver")
+    set(EXECUTABLE_NAME "epochserver")
 endif()
 
 add_library (${EXECUTABLE_NAME} SHARED 
-	${SOURCES} 
-	${SOURCES_HTTP} 
+    ${SOURCES} 
+    ${SOURCES_HTTP} 
 )
 
 
@@ -59,34 +59,47 @@ include_directories(${RAPIDJSON_INCLUDE_DIRS})
 find_path(PCRE_INCLUDE pcre.h)
 include_directories(${PCRE_INCLUDE})
 find_library(PCRE_LIB pcre)
-link_libraries(${PCRE_LIB})
+find_library(PCRED_LIB pcred)
+link_libraries( 
+    opitmized ${PCRE_LIB}
+    debug ${PCRED_LIB}
+)
 
 message("PCRE Include Path:")
 message(${PCRE_INCLUDE})
 message("PCRE Lib Path:")
 message(${PCRE_LIB})
 SET(LIBS ${LIBS} ${PCRE_LIB})
+SET(LIBS_DEBUG ${LIBS_DEBUG} ${PCRED_LIB})
 
 # MYSQL
 find_path(MYSQL_INCLUDE mysql/mysql.h)
 include_directories(${MYSQL_INCLUDE})
 find_library(MYSQL_LIB mysqlclient)
 link_libraries(${MYSQL_LIB})
+# TODO find debug version
 
 find_library(EAY_LIB libeay32)
 link_libraries(${EAY_LIB})
+# TODO find debug version
 
 find_library(SSL_LIB ssleay32)
 link_libraries(${SSL_LIB})
+# TODO find debug version
 
 find_library(Z_LIB zlib)
-link_libraries(${Z_LIB})
+find_library(Z_LIBD zlibd)
+link_libraries(
+    optimized ${Z_LIB}
+    debug ${Z_LIBD}    
+)
 
 message("MYSQL Include Path:")
 message(${MYSQL_INCLUDE})
 message("MYSQL Lib Path:")
 message(${MYSQL_LIB})
 SET(LIBS ${LIBS} ${MYSQL_LIB} ${EAY_LIB} ${SSL_LIB} ${Z_LIB})
+SET(LIBS_DEBUG ${LIBS_DEBUG} ${MYSQL_LIB} ${EAY_LIB} ${SSL_LIB} ${Z_LIBD})
 
 
 # -----------------------
@@ -98,7 +111,7 @@ SET(LIBS ${LIBS} ${MYSQL_LIB} ${EAY_LIB} ${SSL_LIB} ${Z_LIB})
 # START DYNAMIC LIBRARIES
 # -----------------------
 if(${UNIX})
-	set(CMAKE_FIND_LIBRARY_SUFFIXES ".so")
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ".so")
 endif()
 
 
@@ -115,35 +128,35 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if("${CMAKE_CXX_COMPILER_ID}" MATCHES "MSVC")
-	set(CMAKE_CXX_FLAGS_DEBUG_INIT          "/Zi /MT /WX- /0d /Ob0 /EHsc /GS- /Oy- /Oi /Ot /Oy /arch:SSE2 /fp:precise /DNOMINMAX /D_DEBUG /D _WINDLL /Zc:sizedDealloc-")
-	set(CMAKE_CXX_FLAGS_MINSIZEREL_INIT         "/MT /WX- /O1 /Ob0 /EHsc /GS- /Oy  /Oi /Ot /Oy /arch:SSE2 /fp:precise /DNOMINMAX /D NDEBUG /Zc:sizedDealloc-")
-	set(CMAKE_CXX_FLAGS_RELEASE_INIT            "/MT /WX- /O2 /Ob1 /EHsc /GS- /Oy  /Oi /Ot /Oy /arch:SSE2 /fp:precise /DNOMINMAX /D NDEBUG /Zc:sizedDealloc-")
-	set(CMAKE_CXX_FLAGS_RELWITHDEBINFO_INIT "/Zi /MT /Zi  /O2 /Ob1 /EHsc /GS- /Oy- /Oi /Ot /Oy /arch:SSE2 /fp:precise /DNOMINMAX /D_DEBUG /Zc:sizedDealloc-")
-	message("MSVC!")
+    set(CMAKE_CXX_FLAGS_DEBUG_INIT          "/Zi /MT /WX- /0d /Ob0 /EHsc /GS- /Oy- /Oi /Ot /Oy /arch:SSE2 /fp:precise /DNOMINMAX /D _DEBUG /D_WINDLL /wd4996 /Zc:sizedDealloc-")
+    set(CMAKE_CXX_FLAGS_MINSIZEREL_INIT         "/MT /WX- /O1 /Ob0 /EHsc /GS- /Oy  /Oi /Ot /Oy /arch:SSE2 /fp:precise /DNOMINMAX /D NDEBUG /wd4996 /Zc:sizedDealloc-")
+    set(CMAKE_CXX_FLAGS_RELEASE_INIT            "/MT /WX- /O2 /Ob1 /EHsc /GS- /Oy  /Oi /Ot /Oy /arch:SSE2 /fp:precise /DNOMINMAX /D NDEBUG /wd4996 /Zc:sizedDealloc-")
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO_INIT "/Zi /MT /Zi  /O2 /Ob1 /EHsc /GS- /Oy- /Oi /Ot /Oy /arch:SSE2 /fp:precise /DNOMINMAX /D _DEBUG /wd4996 /Zc:sizedDealloc-")
 else()
-	set(CMAKE_CXX_FLAGS_DEBUG_INIT 			  "-march=i686 -msse2 -msse3 -shared -fPIC -m32 -O2 -fomit-frame-pointer")
-	set(CMAKE_CXX_FLAGS_MINSIZEREL_INIT       "-march=i686 -msse2 -msse3 -shared -fPIC -m32 -O2 -fomit-frame-pointer")
-	set(CMAKE_CXX_FLAGS_RELEASE_INIT          "-march=i686 -msse2 -msse3 -shared -fPIC -m32 -O2 -fomit-frame-pointer")
-	set(CMAKE_CXX_FLAGS_RELWITHDEBINFO_INIT   "-march=i686 -msse2 -msse3 -shared -fPIC -m32 -O2 -fomit-frame-pointer")
+    set(CMAKE_CXX_FLAGS_DEBUG_INIT            "-march=i686 -msse2 -msse3 -shared -fPIC -m32 -O2 -fomit-frame-pointer")
+    set(CMAKE_CXX_FLAGS_MINSIZEREL_INIT       "-march=i686 -msse2 -msse3 -shared -fPIC -m32 -O2 -fomit-frame-pointer")
+    set(CMAKE_CXX_FLAGS_RELEASE_INIT          "-march=i686 -msse2 -msse3 -shared -fPIC -m32 -O2 -fomit-frame-pointer")
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO_INIT   "-march=i686 -msse2 -msse3 -shared -fPIC -m32 -O2 -fomit-frame-pointer")
 endif()
 
 if(${WIN32})
-	# Windows
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /wd4996")
-  	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4996")
-	target_link_libraries(${EXECUTABLE_NAME} ${LIBS})
-	add_definitions(-DUNICODE -D_UNICODE -DWIN32_LEAN_AND_MEAN)
-	SET_TARGET_PROPERTIES(${EXECUTABLE_NAME} PROPERTIES LINK_FLAGS " /MANIFEST:NO /ERRORREPORT:NONE")
+    # Windows
+    target_link_libraries(${EXECUTABLE_NAME} 
+        optimized ${LIBS}
+        debug ${LIBS_DEBUG}    
+    )
+    add_definitions(-DUNICODE -D_UNICODE -DWIN32_LEAN_AND_MEAN)
+    SET_TARGET_PROPERTIES(${EXECUTABLE_NAME} PROPERTIES LINK_FLAGS " /MANIFEST:NO /ERRORREPORT:NONE")
 else()
-	# Linux
-	target_link_libraries(${EXECUTABLE_NAME} -Wl,-Bstatic ${LIBS} -Wl,-Bdynamic)
-	set(CMAKE_CXX_FLAGS "-std=c++0x -static-libstdc++ -static-libgcc ${CMAKE_CXX_FLAGS}")
+    # Linux
+    target_link_libraries(${EXECUTABLE_NAME} -Wl,-Bstatic ${LIBS} -Wl,-Bdynamic)
+    set(CMAKE_CXX_FLAGS "-std=c++0x -static-libstdc++ -static-libgcc ${CMAKE_CXX_FLAGS}")
 
-	ADD_CUSTOM_COMMAND(
-		TARGET ${EXECUTABLE_NAME}
-		POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E rename libepochserver.so epochserver.so
-	)
+    ADD_CUSTOM_COMMAND(
+        TARGET ${EXECUTABLE_NAME}
+        POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E rename libepochserver.so epochserver.so
+    )
 
 endif()
 

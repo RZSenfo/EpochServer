@@ -11,12 +11,12 @@
     #define WSADuplicateSocket WSADuplicateSocket
     #define WSASocket WSASocket
     */
-	#include <winsock2.h>
-	#include <ws2tcpip.h>
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
 
 
-	// #pragma comment(lib,"WS2_32.Lib") //Winsock Library
-	#include <stdint.h>
+    // #pragma comment(lib,"WS2_32.Lib") //Winsock Library
+    #include <stdint.h>
 #elif __linux__
     #include <stdio.h>
     #include <errno.h>

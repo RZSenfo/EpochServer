@@ -18,13 +18,13 @@
 
 
 RedisConnector::RedisConnector() {
-	this->context = NULL;
+    this->context = NULL;
 }
 
 RedisConnector::~RedisConnector() {
-	if (this->context != NULL) {
-		redisFree(this->context);
-	}
+    if (this->context != NULL) {
+        redisFree(this->context);
+    }
 }
 
 bool RedisConnector::init(EpochlibConfigDB _config) {
@@ -55,109 +55,109 @@ bool RedisConnector::init(EpochlibConfigDB _config) {
 }
 
 EpochlibDBExecute RedisConnector::execute(const char *format, ...) {
-	this->_reconnect(0);
+    this->_reconnect(0);
 
-	va_list ap;
-	EpochlibDBExecute returnObj;
-	redisReply *reply = NULL;
+    va_list ap;
+    EpochlibDBExecute returnObj;
+    redisReply *reply = NULL;
 
-	while (reply == NULL) {
-		// Lock, execute, unlock
-		this->contextMutex.lock();
-		va_start(ap, format);
-		reply = (redisReply *)redisvCommand(this->context, format, ap);
-		va_end(ap);
-		this->contextMutex.unlock();
+    while (reply == NULL) {
+        // Lock, execute, unlock
+        this->contextMutex.lock();
+        va_start(ap, format);
+        reply = (redisReply *)redisvCommand(this->context, format, ap);
+        va_end(ap);
+        this->contextMutex.unlock();
 
-		if (reply->type == REDIS_REPLY_ERROR) {
-			returnObj.success = false;
-			returnObj.message = reply->str;
-			this->config.logger->log("[Redis] Error command " + std::string(reply->str));
-		}
-		else {
+        if (reply->type == REDIS_REPLY_ERROR) {
+            returnObj.success = false;
+            returnObj.message = reply->str;
+            this->config.logger->log("[Redis] Error command " + std::string(reply->str));
+        }
+        else {
 
-			if (reply->type == REDIS_REPLY_STRING) {
+            if (reply->type == REDIS_REPLY_STRING) {
                 returnObj.success = reply->str != NULL;
                 returnObj.message = reply->str;
-			}
-			else if (reply->type == REDIS_REPLY_INTEGER) {
-			    returnObj.success = true;
-				std::stringstream IntToString;
-				IntToString << reply->integer;
-				returnObj.message = IntToString.str();
-			}
-		}
-	}
+            }
+            else if (reply->type == REDIS_REPLY_INTEGER) {
+                returnObj.success = true;
+                std::stringstream IntToString;
+                IntToString << reply->integer;
+                returnObj.message = IntToString.str();
+            }
+        }
+    }
 
-	freeReplyObject(reply);
+    freeReplyObject(reply);
 
-	return returnObj;
+    return returnObj;
 }
 
 void RedisConnector::_reconnect(bool _force) {
-	// Security context lock
-	this->contextMutex.lock();
+    // Security context lock
+    this->contextMutex.lock();
 
-	if (this->context == NULL || _force) {
-		int retries = 0;
+    if (this->context == NULL || _force) {
+        int retries = 0;
         struct timeval timeout { 1, 50000 };
 
-		do {
-			if (this->context != NULL) {
-				redisFree(this->context);
-			}
+        do {
+            if (this->context != NULL) {
+                redisFree(this->context);
+            }
 
             this->context = redisConnectWithTimeout(this->config.ip.c_str(), this->config.port, timeout);
 
-			if (this->context->err) {
-				this->config.logger->log("[Redis] " + std::string(this->context->errstr));
-			}
+            if (this->context->err) {
+                this->config.logger->log("[Redis] " + std::string(this->context->errstr));
+            }
 
-			retries++;
-		} while (this->context == NULL || (this->context->err & (REDIS_ERR_IO || REDIS_ERR_EOF) && retries < REDISCONNECTOR_MAXCONNECTION_RETRIES));
+            retries++;
+        } while (this->context == NULL || (this->context->err & (REDIS_ERR_IO || REDIS_ERR_EOF) && retries < REDISCONNECTOR_MAXCONNECTION_RETRIES));
 
-		/* Too many retries -> exit server with log */
-		if (retries == REDISCONNECTOR_MAXCONNECTION_RETRIES) {
-			this->config.logger->log("[Redis] Server not reachable");
-			exit(1);
-		}
+        /* Too many retries -> exit server with log */
+        if (retries == REDISCONNECTOR_MAXCONNECTION_RETRIES) {
+            this->config.logger->log("[Redis] Server not reachable");
+            exit(1);
+        }
 
-		/* Password given -> AUTH */
-		if (!this->config.password.empty()) {
-			redisReply *authReply = NULL;
+        /* Password given -> AUTH */
+        if (!this->config.password.empty()) {
+            redisReply *authReply = NULL;
 
-			while (authReply == NULL) {
-				authReply = (redisReply *)redisCommand(this->context, "AUTH %s", this->config.password.c_str());
-			}
-			if (authReply->type == REDIS_REPLY_STRING) {
-				if (strcmp(authReply->str, "OK") == 0) {
-					this->config.logger->log("[Redis] Could not authenticate: " + std::string(authReply->str));
-				}
-			}
+            while (authReply == NULL) {
+                authReply = (redisReply *)redisCommand(this->context, "AUTH %s", this->config.password.c_str());
+            }
+            if (authReply->type == REDIS_REPLY_STRING) {
+                if (strcmp(authReply->str, "OK") == 0) {
+                    this->config.logger->log("[Redis] Could not authenticate: " + std::string(authReply->str));
+                }
+            }
 
-			freeReplyObject(authReply);
-		}
+            freeReplyObject(authReply);
+        }
 
-		/* Database index given -> change database */
+        /* Database index given -> change database */
         int dbIndex = std::stoi(this->config.dbIndex);
-		if (dbIndex > 0) {
-			redisReply *selectReply = NULL;
+        if (dbIndex > 0) {
+            redisReply *selectReply = NULL;
 
-			while (selectReply == NULL) {
-				selectReply = (redisReply *)redisCommand(this->context, "SELECT %d", dbIndex);
-			}
-			if (selectReply->type == REDIS_REPLY_STRING) {
-				if (strcmp(selectReply->str, "OK") == 0) {
-					this->config.logger->log("[Redis] Could not change database: " + std::string(selectReply->str));
-				}
-			}
+            while (selectReply == NULL) {
+                selectReply = (redisReply *)redisCommand(this->context, "SELECT %d", dbIndex);
+            }
+            if (selectReply->type == REDIS_REPLY_STRING) {
+                if (strcmp(selectReply->str, "OK") == 0) {
+                    this->config.logger->log("[Redis] Could not change database: " + std::string(selectReply->str));
+                }
+            }
 
-			freeReplyObject(selectReply);
-		}
-	}
+            freeReplyObject(selectReply);
+        }
+    }
 
-	// Unlock
-	this->contextMutex.unlock();
+    // Unlock
+    this->contextMutex.unlock();
 }
 
 std::string RedisConnector::getRange(const std::string& _key, const std::string& _value, const std::string& _value2) {
@@ -284,7 +284,7 @@ std::string RedisConnector::getTtl(const std::string& _key) {
 }
 
 std::string RedisConnector::set(const std::string& _key, const std::string& _value) {
-    // _value not used atm	
+    // _value not used atm    
     int regexReturnCode = pcre_exec(this->setValueRegex, NULL, _value.c_str(), _value.length(), 0, 0, NULL, NULL);
     if (regexReturnCode == 0) {
         return this->_DBExecToSQF(this->execute("SET %s %s", _key.c_str(), _value.c_str()), SQF_RETURN_TYPE::NOTHING).toArray();

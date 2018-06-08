@@ -26,103 +26,103 @@
 
 class Epochlib {
 private:
-	
+    
     bool initialized;
-	EpochlibConfig config;
+    EpochlibConfig config;
 
-	std::shared_ptr<Logger> logger;
+    std::shared_ptr<Logger> logger;
 
     //Helper
-	bool _fileExist(const std::string& FileName);
-	bool _loadConfig(const std::string& ConfigFilename);
-	std::string _getBattlEyeGUID(int64 SteamId);
-	bool _isOffialServer();
-    	
+    bool _fileExist(const std::string& FileName);
+    bool _loadConfig(const std::string& ConfigFilename);
+    std::string _getBattlEyeGUID(int64 SteamId);
+    bool _isOffialServer();
+        
     //MySQL specifics
     // -
 
     //Antihack
-	std::mutex steamIdWhitelistMutex;
-	std::vector<int64> steamIdWhitelist;
+    std::mutex steamIdWhitelistMutex;
+    std::vector<int64> steamIdWhitelist;
 
 public:
-	
+    
     Epochlib(std::string configPath, std::string profilePath, int outputSize);
-	~Epochlib();
+    ~Epochlib();
 
     /*
      * Database Access
      */
     std::unique_ptr<DBConnector> db;
 
-	/* 
+    /* 
      *  Get Config
-	 */
-	std::string getConfig();
+     */
+    std::string getConfig();
 
-	/* 
+    /* 
      *  Initial player check
-	 *  64Bit Steam community id
-	 */
-	std::string initPlayerCheck(int64 steamId);
+     *  64Bit Steam community id
+     */
+    std::string initPlayerCheck(int64 steamId);
 
-	/* 
+    /* 
      *  Add ban with reason to bans.txt
-	 *  64Bit Steam community id
-	 *  Reason
-	 */
-	std::string addBan(int64 steamId, const std::string& reason);
+     *  64Bit Steam community id
+     *  Reason
+     */
+    std::string addBan(int64 steamId, const std::string& reason);
 
-	/* 
+    /* 
      *  Add whitelisted string to publicvariable.txt
-	 *  String needs to be whitelisted
-	 */
-	std::string updatePublicVariable(const std::vector<std::string>& whitelistStrings);
-	std::string getRandomString(int stringCount);
+     *  String needs to be whitelisted
+     */
+    std::string updatePublicVariable(const std::vector<std::string>& whitelistStrings);
+    std::string getRandomString(int stringCount);
 
-	std::string getStringMd5(const std::vector<std::string>& stringsToHash);
+    std::string getStringMd5(const std::vector<std::string>& stringsToHash);
 
-	/* 
+    /* 
      *  Get current time
-	 */
-	std::string getCurrentTime();
+     */
+    std::string getCurrentTime();
 
     /*
      *  Server Protection
      */
-	std::string getServerMD5();
-	
-	/* 
+    std::string getServerMD5();
+    
+    /* 
      *  BE broadcast message 
-	 *  Message
-	 */
-	void beBroadcastMessage (const std::string& Message);
-	
-	/* 
+     *  Message
+     */
+    void beBroadcastMessage (const std::string& Message);
+    
+    /* 
      *  BE kick
-	 *  PlayerUID
-	 * Message
-	 */
-	void beKick (const std::string& PlayerUID, const std::string& Message);
-	
-	/* 
+     *  PlayerUID
+     * Message
+     */
+    void beKick (const std::string& PlayerUID, const std::string& Message);
+    
+    /* 
      *  BE ban
-	 *  PlayerUID
-	 *  Message
-	 *  Duration (minutes)
-	 */
-	void beBan(const std::string& PlayerUID, const std::string& Message, const std::string& Duration);
-	
-	/* 
+     *  PlayerUID
+     *  Message
+     *  Duration (minutes)
+     */
+    void beBan(const std::string& PlayerUID, const std::string& Message, const std::string& Duration);
+    
+    /* 
      *  BE shutdown 
-	 */
-	void beShutdown();
-	
-	/* 
+     */
+    void beShutdown();
+    
+    /* 
      *  BE lock / unlock
-	 */
-	void beLock();
-	void beUnlock();
+     */
+    void beLock();
+    void beUnlock();
 
 
     void log(const std::string& log);
