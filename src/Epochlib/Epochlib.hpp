@@ -17,6 +17,7 @@
 #include <ctime>
 #include <mutex>
 #include <regex>
+#include <memory>
 
 #define EPOCHLIB_SERVERMD5 "8497e70dafab88ea432338fee8c86579" //"426a526f91eea855dc889d21205e574c"
 

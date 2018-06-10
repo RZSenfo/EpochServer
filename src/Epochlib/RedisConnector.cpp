@@ -14,6 +14,7 @@
 //#include "../../deps/redis/deps/hiredis/hiredis.h"
 #include <hiredis.h>
 #include <sys/time.h>
+#include <string.h>
 #endif
 
 

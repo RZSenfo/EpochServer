@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <sstream>
 #include <fstream>
+#include <memory>
 
 bool iequals(const std::string& string1, const std::string& string2) {
     return  string1.size() == string2.size()

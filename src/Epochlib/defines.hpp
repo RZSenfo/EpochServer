@@ -2,6 +2,8 @@
 #define __EPOCHLIB_DEF__
 
 #include <string>
+#include <memory>
+
 #include "Logger.hpp"
 
 typedef unsigned char uint8;

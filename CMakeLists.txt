@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.6)
+cmake_minimum_required(VERSION 3.0)
 
 project(epochserver)
 
@@ -30,7 +30,13 @@ if (WIN32)
 endif()
 
 #include external headers
+
+if(WIN32)
 include_directories(deps/hiredis)
+else()
+find_package(hiredis REQUIRED)
+endif()
+
 include_directories(deps/happyhttp)
 
 
@@ -53,7 +59,7 @@ if(${UNIX})
      set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
 endif()
 
-find_package(rapidjson REQUIRED)
+find_package(RapidJSON REQUIRED)
 include_directories(${RAPIDJSON_INCLUDE_DIRS})
 
 find_path(PCRE_INCLUDE pcre.h)
@@ -79,6 +85,7 @@ find_library(MYSQL_LIB mysqlclient)
 link_libraries(${MYSQL_LIB})
 # TODO find debug version
 
+if(WIN32)
 find_library(EAY_LIB libeay32)
 link_libraries(${EAY_LIB})
 # TODO find debug version
@@ -93,15 +100,19 @@ link_libraries(
     optimized ${Z_LIB}
     debug ${Z_LIBD}    
 )
-
+endif()
 message("MYSQL Include Path:")
 message(${MYSQL_INCLUDE})
 message("MYSQL Lib Path:")
 message(${MYSQL_LIB})
+
+if(WIN32)
 SET(LIBS ${LIBS} ${MYSQL_LIB} ${EAY_LIB} ${SSL_LIB} ${Z_LIB})
 SET(LIBS_DEBUG ${LIBS_DEBUG} ${MYSQL_LIB} ${EAY_LIB} ${SSL_LIB} ${Z_LIBD})
-
-
+else()
+SET(LIBS ${LIBS} ${MYSQL_LIB})
+SET(LIBS_DEBUG ${LIBS_DEBUG} ${MYSQL_LIB})
+endif()
 # -----------------------
 # END STATIC LIBRARIES
 # -----------------------
@@ -123,10 +134,6 @@ endif()
 # Build and Link options
 #
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
 if("${CMAKE_CXX_COMPILER_ID}" MATCHES "MSVC")
     set(CMAKE_CXX_FLAGS_DEBUG_INIT          "/Zi /MT /WX- /0d /Ob0 /EHsc /GS- /Oy- /Oi /Ot /Oy /arch:SSE2 /fp:precise /DNOMINMAX /D _DEBUG /D_WINDLL /wd4996 /Zc:sizedDealloc-")
     set(CMAKE_CXX_FLAGS_MINSIZEREL_INIT         "/MT /WX- /O1 /Ob0 /EHsc /GS- /Oy  /Oi /Ot /Oy /arch:SSE2 /fp:precise /DNOMINMAX /D NDEBUG /wd4996 /Zc:sizedDealloc-")
@@ -139,6 +146,10 @@ else()
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO_INIT   "-march=i686 -msse2 -msse3 -shared -fPIC -m32 -O2 -fomit-frame-pointer")
 endif()
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 if(${WIN32})
     # Windows
     target_link_libraries(${EXECUTABLE_NAME} 
@@ -150,7 +161,7 @@ if(${WIN32})
 else()
     # Linux
     target_link_libraries(${EXECUTABLE_NAME} -Wl,-Bstatic ${LIBS} -Wl,-Bdynamic)
-    set(CMAKE_CXX_FLAGS "-std=c++0x -static-libstdc++ -static-libgcc ${CMAKE_CXX_FLAGS}")
+    set(CMAKE_CXX_FLAGS "-static-libstdc++ -static-libgcc ${CMAKE_CXX_FLAGS}")
 
     ADD_CUSTOM_COMMAND(
         TARGET ${EXECUTABLE_NAME}
