@@ -27,14 +27,13 @@ if (WIN32)
     else()
         link_directories( deps/hiredis/msvs/vs-solutions/vs2015/bin/x86/Release )
     endif()
-endif()
 
-#include external headers
+    include_directories(deps/hiredis)
 
-if(WIN32)
-include_directories(deps/hiredis)
 else()
-find_package(hiredis REQUIRED)
+    SET(LIBS ${LIBS} hiredis)
+    include_directories(deps/hiredis-linux)
+    link_directories(deps/hiredis-linux)
 endif()
 
 include_directories(deps/happyhttp)
@@ -55,7 +54,7 @@ add_library (${EXECUTABLE_NAME} SHARED
 # -----------------------
 # START STATIC LIBRARIES
 # -----------------------
-if(${UNIX})
+if(UNIX)
      set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
 endif()
 
@@ -64,12 +63,21 @@ include_directories(${RAPIDJSON_INCLUDE_DIRS})
 
 find_path(PCRE_INCLUDE pcre.h)
 include_directories(${PCRE_INCLUDE})
+
+if (WIN32)
 find_library(PCRE_LIB pcre)
-find_library(PCRED_LIB pcred)
-link_libraries( 
-    opitmized ${PCRE_LIB}
-    debug ${PCRED_LIB}
+else()
+find_library(PCRE_LIB pcre 
+    PATHS
+        /usr/lib/i386-linux-gnu
+        /lib/i386-linux-gnu
+        /usr/lib32
+        /lib32
+        /usr/lib
+        /lib
 )
+endif()
+find_library(PCRED_LIB pcred)
 
 message("PCRE Include Path:")
 message(${PCRE_INCLUDE})
@@ -81,17 +89,28 @@ SET(LIBS_DEBUG ${LIBS_DEBUG} ${PCRED_LIB})
 # MYSQL
 find_path(MYSQL_INCLUDE mysql/mysql.h)
 include_directories(${MYSQL_INCLUDE})
+
+if(WIN32)
 find_library(MYSQL_LIB mysqlclient)
-link_libraries(${MYSQL_LIB})
+else()
+find_library(MYSQL_LIB mysqlclient
+    PATHS
+        /usr/lib/i386-linux-gnu
+        /lib/i386-linux-gnu
+        /usr/lib32
+        /lib32
+        /usr/lib
+        /lib
+)
+endif()
+
 # TODO find debug version
 
 if(WIN32)
 find_library(EAY_LIB libeay32)
-link_libraries(${EAY_LIB})
 # TODO find debug version
 
 find_library(SSL_LIB ssleay32)
-link_libraries(${SSL_LIB})
 # TODO find debug version
 
 find_library(Z_LIB zlib)
@@ -121,7 +140,7 @@ endif()
 # -----------------------
 # START DYNAMIC LIBRARIES
 # -----------------------
-if(${UNIX})
+if(UNIX)
     set(CMAKE_FIND_LIBRARY_SUFFIXES ".so")
 endif()
 

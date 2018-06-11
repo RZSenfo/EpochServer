@@ -16,6 +16,8 @@
 #include <thread>
 #include <queue>
 #include <atomic>
+#include <mutex>
+#include <condition_variable>
 
 #define SEPARATOR "|"
 #define SEPARATOR_CHAR '|'
@@ -42,7 +44,7 @@ std::vector<std::thread> threadpool;
 std::queue<std::function<void(void)>> tasks;
 std::mutex taskmutex;
 std::condition_variable notifier;
-std::atomic<bool> stop = false;
+std::atomic<bool> stop;
 
 
 bool split1(const std::string&s, const char& delim, std::string& param1) {
@@ -224,7 +226,7 @@ std::string getProfileFolder() {
     if ((numCmdLineArgs = read(cmdlineFile, cmdLineArgs, PATH_MAX)) > 0) {
         std::string procCmdline;
         procCmdline.assign(cmdLineArgs, numCmdLineArgs - 1);
-        commandLine = split(procCmdline, '\0');
+        split(procCmdline, '\0', commandLine);
     }
 #endif
 
@@ -883,6 +885,8 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
 void init() {
     if (EpochLibrary == nullptr) {
         std::string configPath;
+        resultcache = std::vector<std::string>(10000,"");
+        stop = false;
 
 #ifdef WIN32
 
@@ -909,7 +913,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
     switch (ul_reason_for_call) {
     case DLL_PROCESS_ATTACH: {
         init();
-        resultcache = std::vector<std::string>(10000,"");
         break;
     }
     case DLL_THREAD_ATTACH: {
@@ -942,6 +945,6 @@ static void __attribute__((constructor)) dll_load(void) {
 }
 
 static void __attribute__((destructor)) dll_unload(void) {
-    
+
 }
 #endif
