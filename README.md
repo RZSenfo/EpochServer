@@ -35,7 +35,17 @@ Resources
 How to build on Linux
 --------------------------------
 
-SOON(TM)
+REQ COMPILER: GCC/G++ 7!
+
+0. sudo apt-get install cmake
+1. git clone https://github.com/Tencent/rapidjson.git && cd rapidjson && git submodule update --init 
+2. mkdir build && cd build && make && make install && cd ../..
+2. git clone https://github.com/RZSenfo/EpochServer.git && cd EpochServer && git submodule update --init
+3. cd deps/hiredis-linux && make CFLAGS=-m32 LDFLAGS=-m32 && cd ../..
+4. sudo apt-get libpcre3-dev:i386 libmysqlclient-dev:i386 libhiredis-dev:i386
+5. mkdir proj && cd proj 
+6. cmake .. -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_SHARED_LINKER_FLAGS=-m32
+7. make
 
 How to build DLL (Visual Studio)
 --------------------------------
