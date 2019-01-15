@@ -12,8 +12,7 @@
 	url = https://github.com/MariaDB/mariadb-connector-c.git
 [submodule "deps/mariadbpp"]
 	path = deps/mariadbpp
-	branch = intercept
-	url = https://github.com/dedmen/mariadbpp.git
+	url = https://github.com/viaduck/mariadbpp.git
 [submodule "deps/wolfssl"]
 	path = deps/wolfssl
 	url = https://github.com/wolfSSL/wolfssl.git
