@@ -12,5 +12,12 @@
     Github:
     https://github.com/EpochModTeam/Epoch/tree/release/Sources/epoch_server_core/compile/epoch_hive/fn_server_hiveEXPIRE.sqf
 */
-//params ["_prefix","_key","_expires"];
-"epochserver" callExtension format (["131|%1:%2|%3"] + _this); // _prefix, _key, _expires];
+params ["_prefix","_key","_expires"];
+_key = format ["%1:%2",_prefix,_key];
+private _ckey = ["DB",_key] joinString "_";
+private _cache = missionNamespace getVariable _ckey;
+if (!isNil "_cache") then {
+    _cache set [1, _expires];
+    missionNamespace setVariable [_ckey,_cache];
+};
+"epochserver" callExtension format ["131|%1|%2",_key,_expires];

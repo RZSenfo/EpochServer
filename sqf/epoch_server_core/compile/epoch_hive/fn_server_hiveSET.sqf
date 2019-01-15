@@ -12,6 +12,7 @@
     Github:
     https://github.com/EpochModTeam/Epoch/tree/release/Sources/epoch_server_core/compile/epoch_hive/fn_server_hiveSET.sqf
 */
-
 params ["_prefix","_key","_value"];
-"epochserver" callExtension (["111",([_prefix,_key] joinString ":"), _value] joinString "|");
+_key = [_prefix,_key] joinString ":";
+missionNamespace setVariable [["DB_",_key] joinString "_",[_value,-1]];
+"epochserver" callExtension ([111,_key,"",_value] joinString "|")

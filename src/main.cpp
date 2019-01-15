@@ -812,10 +812,11 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
     else {
 
         if (threadpool.empty()) {
-            unsigned int max_thread = std::thread::hardware_concurrency();
-            max_thread = max_thread > 3 ? 3 : max_thread; //I like 3 :)
-            for (unsigned int i = 0; i < max_thread; i++) {
+            //unsigned int max_thread = std::thread::hardware_concurrency();
+            //max_thread = max_thread > 3 ? 3 : max_thread; //I like 3 :)
+            //for (unsigned int i = 0; i < max_thread; i++) {
 
+                //only one thread to asure the transactions are in the right order, if they happen
                 threadpool.emplace_back(
                     std::thread([&]() {
 
@@ -846,7 +847,7 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
                     } while (!stop);
 
                 }));
-            };
+            //};
         }
 
         hiveOutput = "0.6.0.0";

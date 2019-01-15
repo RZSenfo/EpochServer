@@ -1,3 +1,22 @@
 [submodule "deps/hiredis-linux"]
 	path = deps/hiredis-linux
 	url = https://github.com/redis/hiredis.git
+[submodule "deps/pcre"]
+	path = deps/pcre
+	url = https://github.com/svn2github/pcre.git
+[submodule "deps/intercept"]
+	path = deps/intercept
+	url = https://github.com/intercept/intercept.git
+[submodule "deps/mariadb-connector-c"]
+	path = mariadb-connector-c
+	url = https://github.com/MariaDB/mariadb-connector-c.git
+[submodule "deps/mariadbpp"]
+	path = deps/mariadbpp
+	branch = intercept
+	url = https://github.com/dedmen/mariadbpp.git
+[submodule "deps/wolfssl"]
+	path = deps/wolfssl
+	url = https://github.com/wolfSSL/wolfssl.git
+[submodule "deps/yaml-cpp"]
+	path = deps/yaml-cpp
+	url = https://github.com/jbeder/yaml-cpp.git

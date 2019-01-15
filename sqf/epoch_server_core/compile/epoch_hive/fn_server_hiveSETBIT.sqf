@@ -12,5 +12,8 @@
     Github:
     https://github.com/EpochModTeam/Epoch/tree/release/Sources/epoch_server_core/compile/epoch_hive/fn_server_hiveSETBIT.sqf
 */
-//params ["_prefix","_key","_bitIndex","_value"];
-"epochserver" callExtension format (["141|%1:%2|%3|%4"] + _this);
+params ["_prefix","_key","_bitIndex","_value"];
+_key = format ["%1:%2|%3",_prefix,_key,_bitIndex];
+_ckey = format ["DB_%1",_key];
+missionNamespace setVariable [_ckey, _value isEqualTo "1"];
+"epochserver" callExtension format ["141|%1|%2"];

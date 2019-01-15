@@ -13,4 +13,6 @@
     https://github.com/EpochModTeam/Epoch/tree/release/Sources/epoch_server_core/compile/epoch_hive/fn_server_hiveSETEX.sqf
 */
 params ["_prefix","_key","_expires","_value"];
-"epochserver" callExtension (["121|",_prefix,":",_key,"|",_expires,"|",_value] joinString "");
+_key = [_prefix,_key] joinString ":";
+missionNamespace setVariable [["DB_",_key] joinString "_",[_value,time+_expires]];
+"epochserver" callExtension (["121|",_key,"|",_expires,"|",_value] joinString "");
