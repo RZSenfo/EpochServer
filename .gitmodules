@@ -8,7 +8,7 @@
 	path = deps/intercept
 	url = https://github.com/intercept/intercept.git
 [submodule "deps/mariadb-connector-c"]
-	path = mariadb-connector-c
+	path = deps/mariadb-connector-c
 	url = https://github.com/MariaDB/mariadb-connector-c.git
 [submodule "deps/mariadbpp"]
 	path = deps/mariadbpp
