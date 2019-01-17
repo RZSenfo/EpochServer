@@ -59,12 +59,6 @@ else()
     # Linux
     TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME} -Wl,-Bstatic ${INTERCEPT_PLUGIN_LIBS} -Wl,-Bdynamic )
     SET( CMAKE_CXX_FLAGS "-static-libstdc++ -static-libgcc ${CMAKE_CXX_FLAGS}" )
-
-    ADD_CUSTOM_COMMAND(
-        TARGET ${INTERCEPT_PLUGIN_NAME}
-        POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E rename libepochserver.so epochserver.so
-    )
 endif()
 
 TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME} mariadbclientpp yaml-cpp pcre )
