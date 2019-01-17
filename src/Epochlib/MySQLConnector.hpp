@@ -6,7 +6,7 @@
 
 #include "DBConnector.hpp"
 
-#include <mysql/mysql.h>
+#include <mysql.h>
 
 class MySQLConnector : public DBConnector {
 private:

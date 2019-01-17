@@ -1,146 +1,157 @@
-cmake_minimum_required(VERSION 3.6)
+CMAKE_MINIMUM_REQUIRED( VERSION 3.6 )
 
-project(epochserver)
+PROJECT( epochserver )
 
-option(USE_ENGINE_TYPES "USE_ENGINE_TYPES" ON)
+OPTION( USE_ENGINE_TYPES "USE_ENGINE_TYPES" ON )
 
-option(USE_64BIT_BUILD "USE_64BIT_BUILD" OFF)
-set(INTERCEPT_LINK_TYPE "static")
+OPTION( USE_64BIT_BUILD "USE_64BIT_BUILD" OFF )
+SET( INTERCEPT_LINK_TYPE "static" )
 
 if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
-	set( USE_64BIT_BUILD ON)
+	SET( USE_64BIT_BUILD ON )
 endif()
 
 # check for correct version of MSVC (c++17 compliant)
 if("${CMAKE_GENERATOR}" MATCHES "Visual Studio 15 2017 Win64")
-    set( CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} /std:c++latest" )
-    set( USE_64BIT_BUILD ON) #since linux doesnt support 64 bit anyways
+    SET( CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} /std:c++latest" )
+    SET( USE_64BIT_BUILD ON )
 elseif("${CMAKE_GENERATOR}" MATCHES "Visual Studio 15 2017")
-    set( CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} /std:c++latest" )
+    SET( CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} /std:c++latest" )
 elseif("${CMAKE_CXX_COMPILER_ID}" MATCHES "MSVC")
-    message(FATAL_ERROR "ERROR: You need a C++17 compatible compiler")
+    MESSAGE( FATAL_ERROR "ERROR: You need a C++17 compatible compiler" )
 endif()
 
-add_definitions(/D_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS) #No I don't cheat!
+ADD_DEFINITIONS( /D_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS )
 
-message("GENERATOR USED: '${CMAKE_GENERATOR}'")
-message("COMPILER USED: '${CMAKE_CXX_COMPILER_ID}'")
+MESSAGE( "GENERATOR USED: '${CMAKE_GENERATOR}'" )
+MESSAGE( "COMPILER USED: '${CMAKE_CXX_COMPILER_ID}'" )
 
-set(CMAKE_CL_64 ${USE_64BIT_BUILD})
-
-if (USE_64BIT_BUILD)
-    set(EXECUTABLE_NAME "epochserver_x64")
-else()
-    set(EXECUTABLE_NAME "epochserver")
-endif()
+SET( CMAKE_CL_64 ${USE_64BIT_BUILD} )
 
 if(USE_64BIT_BUILD)
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/build/win64/")
+    SET( CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/build/win64/" )
 elseif("${CMAKE_GENERATOR}" MATCHES "Visual Studio 15 2017")
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/build/win32/")
+    SET( CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/build/win32/" )
 else()
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/build/linux/")
+    SET( CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/build/linux/" )
 endif()
 
 if(UNIX)
-     set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+    SET( CMAKE_FIND_LIBRARY_SUFFIXES ".a" )
 endif()
 
 #yaml resets c++17 so I just move it above ours so we don't have to re-set
-SET(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "Don't want" FORCE)
-SET(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "Don't want" FORCE)
-SET(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "Don't want" FORCE)
-SET(YAML_CPP_INSTALL OFF CACHE BOOL "Don't want" FORCE)
-SET(MSVC_SHARED_RT OFF CACHE BOOL "want static" FORCE)
-add_subdirectory( "${PROJECT_SOURCE_DIR}/deps/yaml-cpp" )
+SET( YAML_CPP_BUILD_TESTS OFF CACHE BOOL "Don't want" FORCE )
+SET( YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "Don't want" FORCE )
+SET( YAML_CPP_BUILD_TESTS OFF CACHE BOOL "Don't want" FORCE )
+SET( YAML_CPP_INSTALL OFF CACHE BOOL "Don't want" FORCE )
+SET( MSVC_SHARED_RT OFF CACHE BOOL "want static" FORCE )
+ADD_SUBDIRECTORY( "${PROJECT_SOURCE_DIR}/deps/yaml-cpp" )
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+SET( CMAKE_CXX_STANDARD 17 )
+SET( CMAKE_CXX_STANDARD_REQUIRED ON )
+SET( CMAKE_CXX_EXTENSIONS OFF )
 
-set(CMAKE_INCLUDE_CURRENT_DIR ON) 
-set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+SET( CMAKE_INCLUDE_CURRENT_DIR ON )
+SET_PROPERTY( GLOBAL PROPERTY USE_FOLDERS ON )
 
-set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "" FORCE)
+SET( CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "" FORCE )
 
-SET(BUILD_STATIC ON CACHE BOOL "force static lib" FORCE)
-SET(STATIC_MSVCRT ON CACHE BOOL "force static lib" FORCE)
+SET( BUILD_STATIC ON CACHE BOOL "force static lib" FORCE )
+SET( STATIC_MSVCRT ON CACHE BOOL "force static lib" FORCE )
 
-SET(WITH_UNIT_TESTS OFF CACHE BOOL "no mysql tests" FORCE)
-set(WITH_SSL "OFF" CACHE STRING "Disabled for now" FORCE)
+SET( WITH_UNIT_TESTS OFF CACHE BOOL "no mysql tests" FORCE )
+SET( WITH_SSL "OFF" CACHE STRING "Disabled for now" FORCE )
 #TODO test with wolfssl
 
 if(CMAKE_COMPILER_IS_GNUCXX)
-	set(CMAKE_CXX_FLAGS "-std=c++1z -O2 -s -fPIC -fpermissive -static-libgcc -static-libstdc++ -march=i686 -m32")
-	set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
-	set(CMAKE_SHARED_LINKER_FLAGS "-shared -static-libgcc -static-libstdc++")
+    SET( CMAKE_CXX_FLAGS "-std=c++1z -O2 -s -fPIC -fpermissive -static-libgcc -static-libstdc++ -march=i686 -m32" )
+    SET( CMAKE_FIND_LIBRARY_SUFFIXES ".a" )
+    SET( CMAKE_SHARED_LINKER_FLAGS "-shared -static-libgcc -static-libstdc++" )
 else()
-	set(CMAKE_CXX_FLAGS_DEBUG "/D_DEBUG /MTd /Zi /Ob0 /Od /RTC1 /MP /EHsc")
-	set(CMAKE_CXX_FLAGS_RELEASE "/MT /Zi /O2 /Ob1 /EHsc /MP") #with debug info
-	set(CMAKE_C_FLAGS_DEBUG "/D_DEBUG /MTd /Zi /Ob0 /Od /RTC1 /MP /EHsc")
-	set(CMAKE_C_FLAGS_RELEASE "/MT /Zi /O2 /Ob1 /EHsc /MP") #with debug info
-	set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "/OPT:REF /DEBUG:FULL") 
+    SET( CMAKE_CXX_FLAGS_DEBUG "/D_DEBUG /MTd /Zi /Ob0 /Od /RTC1 /MP /EHsc" )
+    SET( CMAKE_CXX_FLAGS_RELEASE "/MT /Zi /O2 /Ob1 /EHsc /MP" ) #with debug info
+    SET( CMAKE_C_FLAGS_DEBUG "/D_DEBUG /MTd /Zi /Ob0 /Od /RTC1 /MP /EHsc" )
+    SET( CMAKE_C_FLAGS_RELEASE "/MT /Zi /O2 /Ob1 /EHsc /MP" ) #with debug info
+    SET( CMAKE_SHARED_LINKER_FLAGS_RELEASE "/OPT:REF /DEBUG:FULL" )
 endif()
 
-add_subdirectory( "${PROJECT_SOURCE_DIR}/deps/mariadb-connector-c" )
-add_subdirectory( "${PROJECT_SOURCE_DIR}/deps/mariadbpp" )
+INCLUDE_DIRECTORIES( ${PROJECT_SOURCE_DIR}/deps/mariadbpp/include )
+INCLUDE_DIRECTORIES( ${PROJECT_SOURCE_DIR}/deps/mariadb-connector-c/include )
+# add_subdirectory( "${PROJECT_SOURCE_DIR}/deps/mariadb-connector-c" )
 
-include_directories(AFTER "${PROJECT_SOURCE_DIR}/mariadbpp/include")
-include_directories(AFTER "${PROJECT_SOURCE_DIR}/mariadb-connector-c/include")
+#CONFIGURE_FILE("${CMAKE_CURRENT_BINARY_DIR}/deps/mariadb-connector-c/include/mariadb_version.h"
+#               "${PROJECT_SOURCE_DIR}/deps/mariadb-connector-c/include/mariadb_version.h")
 
-add_subdirectory(src)
+# SET(MariaDBClient_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/deps/mariadb-connector-c/include")
 
+MESSAGE( STATUS "CONFIGURING MARIADB CONNECTOR...")
+EXECUTE_PROCESS(
+    COMMAND "cmake" . -G${CMAKE_GENERATOR}
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/deps/mariadb-connector-c"
+    RESULT_VARIABLE CMD_RESULT
+    OUTPUT_VARIABLE CMD_OUTPUT
+    ERROR_VARIABLE CMD_ERROR  
+)
+MESSAGE( STATUS "CMD_RESULT:" ${CMD_RESULT})
+MESSAGE( STATUS "CMD_ERROR:" ${CMD_ERROR})
+MESSAGE( STATUS "CMD_OUTPUT:" ${CMD_OUTPUT})
+MESSAGE( STATUS "CONFIGURING MARIADB CONNECTOR DONE")
 
-#glob external sources
-file(GLOB_RECURSE SOURCES_HTTP "${PROJECT_SOURCE_DIR}/deps/happyhttp/happyhttp.cpp deps/happyhttp/*.h")
+MESSAGE( STATUS "BUILDING MARIADB CONNECTOR...")
+EXECUTE_PROCESS(
+    COMMAND "cmake" --build . --config Release
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/deps/mariadb-connector-c"
+    RESULT_VARIABLE CMD_RESULT
+    OUTPUT_VARIABLE CMD_OUTPUT
+    ERROR_VARIABLE CMD_ERROR  
+)
+MESSAGE( STATUS "CMD_RESULT:" ${CMD_RESULT} )
+MESSAGE( STATUS "CMD_ERROR:" ${CMD_ERROR} )
+MESSAGE( STATUS "CMD_OUTPUT:" ${CMD_OUTPUT} )
+MESSAGE( STATUS "BUILDING MARIADB CONNECTOR DONE" )
 
-if (WIN32)
-    SET(LIBS ${LIBS} ws2_32 hiredis win32_interop)
-    if (USE_64BIT_BUILD)
-        link_directories( "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x64/Release" )
-    else()
-        link_directories( "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x86/Release" )
-    endif()
+FIND_LIBRARY( MariaDBClient_LIBRARY
+    NAMES mariadb mariadbclient mysqlclient
+    PATH_SUFFIXES mariadb mysql
+    HINTS   ${PROJECT_SOURCE_DIR}/deps/mariadb-connector-c/libmariadb
+            ${PROJECT_SOURCE_DIR}/deps/mariadb-connector-c/libmariadb/Release
+            ${PROJECT_SOURCE_DIR}/deps/mariadb-connector-c/libmariadb/Debug
+)
+SET( MariaDBClient_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/deps/mariadb-connector-c/include" )
 
-    include_directories( "${PROJECT_SOURCE_DIR}/deps/hiredis" )
-else()
-    SET(LIBS ${LIBS} hiredis)
-    include_directories( "${PROJECT_SOURCE_DIR}/deps/hiredis-linux" )
-    link_directories( "${PROJECT_SOURCE_DIR}/deps/hiredis-linux" )
-endif()
-
-include_directories( "${PROJECT_SOURCE_DIR}/deps/happyhttp" )
-
-add_library (${EXECUTABLE_NAME} SHARED 
-    ${SOURCES} 
-    ${SOURCES_HTTP} 
+CONFIGURE_FILE( 
+    ${PROJECT_SOURCE_DIR}/deps/changes/mariadbpp-CMakeLists.txt
+    ${PROJECT_SOURCE_DIR}/deps/mariadbpp/CMakeLists.txt
+    COPYONLY
 )
 
-add_subdirectory( "${PROJECT_SOURCE_DIR}/deps/pcre" )
+ADD_SUBDIRECTORY( "${PROJECT_SOURCE_DIR}/deps/mariadbpp" )
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+#GET_TARGET_PROPERTY(TARGET_LIBRARIES mariadbclientpp LINK_LIBRARIES)
+#MESSAGE( STATUS "LL: " ${TARGET_LIBRARIES} )
+#LIST( REMOVE_ITEM TARGET_LIBRARIES pthread )
+#MESSAGE( STATUS "LL: " ${TARGET_LIBRARIES} )
+#SET_PROPERTY( TARGET mariadbclientpp PROPERTY LINK_LIBRARIES  ${TARGET_LIBRARIES} )
 
-if(${WIN32})
-    # Windows
-    target_link_libraries(${EXECUTABLE_NAME} 
-        optimized ${LIBS}
-        debug ${LIBS_DEBUG}    
-    )
-    add_definitions(-DUNICODE -D_UNICODE -DWIN32_LEAN_AND_MEAN)
-    SET_TARGET_PROPERTIES(${EXECUTABLE_NAME} PROPERTIES LINK_FLAGS " /MANIFEST:NO /ERRORREPORT:NONE")
-else()
-    # Linux
-    target_link_libraries(${EXECUTABLE_NAME} -Wl,-Bstatic ${LIBS} -Wl,-Bdynamic)
-    set(CMAKE_CXX_FLAGS "-static-libstdc++ -static-libgcc ${CMAKE_CXX_FLAGS}")
 
-    ADD_CUSTOM_COMMAND(
-        TARGET ${EXECUTABLE_NAME}
-        POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E rename libepochserver.so epochserver.so
-    )
-endif()
+SET( PCRE_STATIC_RUNTIME ON CACHE BOOL "" FORCE )
+SET( PCRE_BUILD_TESTS OFF CACHE BOOL "" FORCE )
+ADD_SUBDIRECTORY( "${PROJECT_SOURCE_DIR}/deps/pcre" )
+INCLUDE_DIRECTORIES( ${PROJECT_SOURCE_DIR}/deps/pcre )
 
-mark_as_advanced(CMAKE_INSTALL_PREFIX)
-mark_as_advanced(CMAKE_CONFIGURATION_TYPES)
+CONFIGURE_FILE(
+    ${PROJECT_SOURCE_DIR}/deps/pcre/pcre.h.in
+    ${PROJECT_SOURCE_DIR}/deps/pcre/pcre.h 
+    COPYONLY
+)
+
+SET( RAPIDJSON_BUILD_DOC OFF CACHE BOOL "" FORCE )
+SET( RAPIDJSON_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE )
+SET( RAPIDJSON_BUILD_TESTS OFF CACHE BOOL "" FORCE )
+ADD_SUBDIRECTORY( "${PROJECT_SOURCE_DIR}/deps/rapidjson" )
+INCLUDE_DIRECTORIES( ${PROJECT_SOURCE_DIR}/deps/rapidjson/include )
+
+ADD_SUBDIRECTORY( src )
+
+GET_TARGET_PROPERTY( TARGET_LIBRARIES ${INTERCEPT_PLUGIN_NAME} LINK_LIBRARIES )

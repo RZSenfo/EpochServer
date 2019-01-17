@@ -10,7 +10,7 @@
 #include <cstdarg>
 
 #define PCRE_STATIC 1
-#include <pcre.h>
+#include <pcre.h.in>
 
 struct redisContext; //forward declare
 
