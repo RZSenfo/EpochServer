@@ -21,3 +21,6 @@
 [submodule "deps/yaml-cpp"]
 	path = deps/yaml-cpp
 	url = https://github.com/jbeder/yaml-cpp.git
+[submodule "deps/sqlitecpp"]
+	path = deps/sqlitecpp
+	url = https://github.com/SRombauts/SQLiteCpp.git
