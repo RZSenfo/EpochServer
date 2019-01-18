@@ -1,20 +1,25 @@
 CMAKE_MINIMUM_REQUIRED( VERSION 3.0 )
 
+OPTION( USE_ENGINE_TYPES "USE_ENGINE_TYPES" ON )
+SET( INTERCEPT_LINK_TYPE "static" )
+
+##############################################################################
+##
+## glob project sources
+##
+##############################################################################
 
 FILE( GLOB_RECURSE INTERCEPT_PLUGIN_SOURCES *.h *.hpp *.c *.cpp )
 SOURCE_GROUP( "src" FILES ${INTERCEPT_PLUGIN_SOURCES} )
 
-#include the Intercept headers from the submodule
+##############################################################################
+##
+## Intercept sources
+## include the Intercept headers from the submodule
+##
+##############################################################################
 SET( INTERCEPT_CLIENT_PATH "${CMAKE_SOURCE_DIR}/deps/intercept/src/client" )
 SET( INTERCEPT_INCLUDE_PATH "${INTERCEPT_CLIENT_PATH}/headers" "${INTERCEPT_CLIENT_PATH}/headers/shared" "${INTERCEPT_CLIENT_PATH}/headers/client/" "${INTERCEPT_CLIENT_PATH}/headers/client/sqf" )
-
-if(USE_64BIT_BUILD)
-    SET( INTERCEPT_PLUGIN_NAME "${CMAKE_PROJECT_NAME}_x64" PARENT_SCOPE )
-    SET( INTERCEPT_PLUGIN_NAME "${CMAKE_PROJECT_NAME}_x64" )
-else()
-    SET( INTERCEPT_PLUGIN_NAME "${CMAKE_PROJECT_NAME}" PARENT_SCOPE )
-    SET( INTERCEPT_PLUGIN_NAME "${CMAKE_PROJECT_NAME}" )
-endif()
 
 ADD_DEFINITIONS( /DINTERCEPT_NO_THREAD_SAFETY )
 
@@ -25,21 +30,50 @@ endif()
 FILE( GLOB INTERCEPT_HOST_SOURCES "${INTERCEPT_CLIENT_PATH}/intercept/client/*.cpp" "${INTERCEPT_CLIENT_PATH}/intercept/client/sqf/*.cpp" "${INTERCEPT_CLIENT_PATH}/intercept/shared/*.cpp" )
 SOURCE_GROUP( "intercept" FILES ${INTERCEPT_HOST_SOURCES} )
 
-#glob external sources
+
+##############################################################################
+##
+## Output name
+##
+##############################################################################
+if(USE_64BIT_BUILD)
+    SET( INTERCEPT_PLUGIN_NAME "${CMAKE_PROJECT_NAME}_x64" PARENT_SCOPE )
+    SET( INTERCEPT_PLUGIN_NAME "${CMAKE_PROJECT_NAME}_x64" )
+else()
+    SET( INTERCEPT_PLUGIN_NAME "${CMAKE_PROJECT_NAME}" PARENT_SCOPE )
+    SET( INTERCEPT_PLUGIN_NAME "${CMAKE_PROJECT_NAME}" )
+endif()
+
+##############################################################################
+##
+## "Baked in" Dependencies
+##
+##############################################################################
+
 FILE( GLOB SOURCES_HTTP "${PROJECT_SOURCE_DIR}/deps/happyhttp/*p.cpp" "${PROJECT_SOURCE_DIR}/deps/happyhttp/*.h" )
 SOURCE_GROUP( "src" FILES ${SOURCES_HTTP} )
 INCLUDE_DIRECTORIES( "${CMAKE_SOURCE_DIR}/deps/happyhttp" )
 
+
+##############################################################################
+##
+## specify the extension library
+##
+##############################################################################
+INCLUDE_DIRECTORIES( ${CMAKE_CURRENT_SOURCE_DIR} ${INTERCEPT_INCLUDE_PATH} )
 ADD_LIBRARY( ${INTERCEPT_PLUGIN_NAME} SHARED 
 	${INTERCEPT_PLUGIN_SOURCES}
 	${INTERCEPT_HOST_SOURCES}	
     ${SOURCES_HTTP} 
 )
 
-# specify hiredis  location
+##############################################################################
+##
+## specify hiredis location
+##
+##############################################################################
 if(WIN32)
     # Windows
-
     SET( INTERCEPT_PLUGIN_LIBS  )
     if(USE_64BIT_BUILD)
         TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME} 
@@ -74,11 +108,23 @@ else()
     SET( CMAKE_CXX_FLAGS "-static-libstdc++ -static-libgcc ${CMAKE_CXX_FLAGS}" )
 endif()
 
-# general libs
-TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME} mariadbclientpp yaml-cpp pcre )
+##############################################################################
+##
+## link general libs
+##
+##############################################################################
+TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME}
+    mariadbclientpp
+    yaml-cpp
+    pcre
+)
 
-INCLUDE_DIRECTORIES( ${CMAKE_CURRENT_SOURCE_DIR} ${INTERCEPT_INCLUDE_PATH} )
 
+##############################################################################
+##
+## library build properties
+##
+##############################################################################
 SET_TARGET_PROPERTIES( ${INTERCEPT_PLUGIN_NAME} PROPERTIES PREFIX "" )
 SET_TARGET_PROPERTIES( ${INTERCEPT_PLUGIN_NAME} PROPERTIES FOLDER "${CMAKE_PROJECT_NAME}" )
 
