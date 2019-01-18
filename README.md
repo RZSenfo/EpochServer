@@ -1,11 +1,18 @@
-**Epoch Server Framework**
-=================
+# **Epoch Server Framework**
 
-Custom Redis http://redis.io/ extension for ArmA 3
+Custom database extension for ArmA 3
+
+Supports:
+* Redis http://redis.io/
+* MySQL
+* ( SQLLite )
 Windows and Linux compatible (DLL/so)
 
 By Epoch Mod Team
 http://epochmod.com/
+
+Extended by Senfo
+https://github.com/RZSenfo
 
 --------------------------
 Developers
@@ -13,59 +20,46 @@ Developers
 * Aaron Clark - [VB]AWOL - Code
 * Florian Kinder - Fank - Code
 * Denis Erygin - devd - Code
-
----------------------------
-Install Notes
----------------------------
-Hive DLL requires vs2017 redist on windows
+* Senfo - Code
 
 ---------------------------
 Resources
 ---------------------------
+Hive DLL requires vs2017 redist on windows
 * Redis - https://github.com/antirez/redis
 * MSOpenTech (Redis for Windows) - https://github.com/MSOpenTech/Redis
 * HappyHttp - http://scumways.com/happyhttp/happyhttp.html
 * rapidjson - https://github.com/miloyip/rapidjson/
 * pcre-win - http://www.airesoft.co.uk/pcre
-* vcpkg - https://github.com/Microsoft/vcpkg
 * hiredis (for windows) - https://github.com/Microsoft/hiredis
-* libmysql (mysql c connector) - https://dev.mysql.com/downloads/connector/c/
+* libmariadbclient (mariadb c connector)
+* mariadbpp
+* yml-cpp
+* wolf-ssl
 
 
 How to build on Linux
 --------------------------------
 
-REQ COMPILER: GCC/G++ 7!
+REQ COMPILER: GCC/G++ 8!
 
-0. sudo apt-get install cmake
-1. git clone https://github.com/Tencent/rapidjson.git && cd rapidjson && git submodule update --init 
-2. mkdir build && cd build && make && make install && cd ../..
-2. git clone https://github.com/RZSenfo/EpochServer.git && cd EpochServer && git submodule update --init
-3. cd deps/hiredis-linux && make CFLAGS=-m32 LDFLAGS=-m32 && cd ../..
-4. sudo apt-get libpcre3-dev:i386 libmysqlclient-dev:i386 libhiredis-dev:i386
-5. mkdir proj && cd proj 
-6. cmake .. -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_SHARED_LINKER_FLAGS=-m32
-7. make
+```
+sudo dpkg --add-architecture i386
+sudo apt-get install cmake gcc-8 g++-8 gcc-8-multilib g++-8-multilib
+git clone https://github.com/RZSenfo/EpochServer.git && cd EpochServer && git submodule update --init --recursive
+mkdir proj && cd proj 
+cmake .. && cmake --build . --config Release
+```
 
 How to build DLL (Visual Studio)
 --------------------------------
 
-IMPORTANT: On Windows libmysql only supports 64bit builds. If you need 32 bit, you need to build and link it yourself.
+Note: Hiredis needed some changes to fix linker issues, so only use the shipped version.
+```
+TODO
+```
 
-Also: Hiredis needed some changes to fix linker issues, so only use the shipped version.
-
-0. Clone the repo
-1. Acquire requirements (static libs) from vcpkg
-* Install vcpkg
-* vcpkg.exe install pcre:x64-windows-static rapidjson:x64-windows-static libmysql:x64-windows-static
-2. Open `hiredis_win.sln` in `/deps/hiredis/msvs/vs-solutions/vs2015`
-3. Compile all Projects with the same config (x32|x64 Debug|Release) as EpochServer (or just all of them)
-4. After the dependencies are successfully compiled create a folder called `proj64` inside the repo root and switch into it
-5. Open up a terminal/cmd inside that folder and run `cmake .. -G "Visual Studio 15 2017 Win64" "-DCMAKE_TOOLCHAIN_FILE=F:\vcpkg\scripts\buildsystems\vcpkg.cmake" "-DVCPKG_TARGET_TRIPLET=x64-windows-static"` (For 32 bit builds change 64 to 86 respectively)
-6. The epochserver.sln should have been created otherwise fix all error.
-7. open up the epochserver.sln and compile everything
-
-Call summary
+Call summary (with callExetension)
 ------------
 
 Syntax: [Group][Operator][Flag]
@@ -137,6 +131,7 @@ Syntax: [Group][Operator][Flag]
 		* 1 (Lock)
 	* 9 (Shutdown Server)
 		* 1 (Asyncron)
+
 
 EpochServer.ini Guide
 ---------------------
