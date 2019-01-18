@@ -241,6 +241,7 @@ INCLUDE_DIRECTORIES( ${PROJECT_SOURCE_DIR}/deps/rapidjson/include )
 SET( SQLITECPP_RUN_CPPLINT OFF CACHE BOOL "" FORCE )
 SET( SQLITECPP_RUN_CPPCHECK OFF CACHE BOOL "" FORCE )
 ADD_SUBDIRECTORY( "${PROJECT_SOURCE_DIR}/deps/sqlitecpp" )
+INCLUDE_DIRECTORIES( ${PROJECT_SOURCE_DIR}/deps/sqlitecpp )
 
 
 ##############################################################################
