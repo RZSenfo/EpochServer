@@ -10,9 +10,11 @@
 [submodule "deps/mariadb-connector-c"]
 	path = deps/mariadb-connector-c
 	url = https://github.com/MariaDB/mariadb-connector-c.git
+	ignore = dirty
 [submodule "deps/mariadbpp"]
 	path = deps/mariadbpp
 	url = https://github.com/viaduck/mariadbpp.git
+	ignore = dirty
 [submodule "deps/wolfssl"]
 	path = deps/wolfssl
 	url = https://github.com/wolfSSL/wolfssl.git
