@@ -117,6 +117,7 @@ TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME}
     mariadbclientpp
     yaml-cpp
     pcre
+    SQLiteCpp
 )
 
 
