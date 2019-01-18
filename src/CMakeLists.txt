@@ -26,20 +26,6 @@ FILE( GLOB INTERCEPT_HOST_SOURCES "${INTERCEPT_CLIENT_PATH}/intercept/client/*.c
 SOURCE_GROUP( "intercept" FILES ${INTERCEPT_HOST_SOURCES} )
 
 #glob external sources
-if(WIN32)
-    SET( INTERCEPT_PLUGIN_LIBS ws2_32 hiredis win32_interop shlwapi )
-    if(USE_64BIT_BUILD)
-        LINK_DIRECTORIES( "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x64/Release" )
-    else()
-        LINK_DIRECTORIES( "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x86/Release" )
-    endif()
-    INCLUDE_DIRECTORIES( "${PROJECT_SOURCE_DIR}/deps/hiredis" )
-else()
-    SET( INTERCEPT_PLUGIN_LIBS hiredis )
-    INCLUDE_DIRECTORIES( "${PROJECT_SOURCE_DIR}/deps/hiredis-linux" )
-    LINK_DIRECTORIES( "${PROJECT_SOURCE_DIR}/deps/hiredis-linux" )
-endif()
-
 FILE( GLOB SOURCES_HTTP "${PROJECT_SOURCE_DIR}/deps/happyhttp/*p.cpp" "${PROJECT_SOURCE_DIR}/deps/happyhttp/*.h" )
 SOURCE_GROUP( "src" FILES ${SOURCES_HTTP} )
 INCLUDE_DIRECTORIES( "${CMAKE_SOURCE_DIR}/deps/happyhttp" )
@@ -50,17 +36,45 @@ ADD_LIBRARY( ${INTERCEPT_PLUGIN_NAME} SHARED
     ${SOURCES_HTTP} 
 )
 
-if(${WIN32})
+# specify hiredis  location
+if(WIN32)
     # Windows
-    TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME} ${INTERCEPT_PLUGIN_LIBS} )
+
+    SET( INTERCEPT_PLUGIN_LIBS  )
+    if(USE_64BIT_BUILD)
+        TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME} 
+            debug "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x64/Debug/hiredis.lib"
+            debug "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x64/Debug/win32_interop.lib"
+            optimized "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x64/Release/hiredis.lib"
+            optimized "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x64/Release/win32_interop.lib"
+        )
+        # LINK_DIRECTORIES( "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x64/Release" )
+    else()
+        TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME}
+            debug "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x86/Debug/hiredis.lib"
+            debug "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x86/Debug/win32_interop.lib"
+            optimized "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x86/Release/hiredis.lib"
+            optimized "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x86/Release/win32_interop.lib"
+        )
+        # LINK_DIRECTORIES( "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x86/Release" )
+    endif()
+    INCLUDE_DIRECTORIES( "${PROJECT_SOURCE_DIR}/deps/hiredis" )
+
+    TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME} ws2_32 shlwapi )
     ADD_DEFINITIONS( -DUNICODE -D_UNICODE -DWIN32_LEAN_AND_MEAN )
     SET_TARGET_PROPERTIES( ${INTERCEPT_PLUGIN_NAME} PROPERTIES LINK_FLAGS " /MANIFEST:NO /ERRORREPORT:NONE" )
 else()
     # Linux
-    TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME} -Wl,-Bstatic ${INTERCEPT_PLUGIN_LIBS} -Wl,-Bdynamic )
+    INCLUDE_DIRECTORIES( "${PROJECT_SOURCE_DIR}/deps/hiredis-linux" )
+    
+    # built by cmake root file
+    LINK_DIRECTORIES( "${PROJECT_SOURCE_DIR}/deps/hiredis-linux" )
+
+    TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME} -Wl,-Bstatic hiredis -Wl,-Bdynamic )
     SET( CMAKE_CXX_FLAGS "-static-libstdc++ -static-libgcc ${CMAKE_CXX_FLAGS}" )
 endif()
 
+# general libs
 TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME} mariadbclientpp yaml-cpp pcre )
 
 INCLUDE_DIRECTORIES( ${CMAKE_CURRENT_SOURCE_DIR} ${INTERCEPT_INCLUDE_PATH} )
