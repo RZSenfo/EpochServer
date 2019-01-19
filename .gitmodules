@@ -24,3 +24,6 @@
 [submodule "deps/sqlitecpp"]
 	path = deps/sqlitecpp
 	url = https://github.com/SRombauts/SQLiteCpp.git
+[submodule "deps/spdlog"]
+	path = deps/spdlog
+	url = https://github.com/gabime/spdlog.git
