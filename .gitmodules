@@ -27,3 +27,6 @@
 [submodule "deps/spdlog"]
 	path = deps/spdlog
 	url = https://github.com/gabime/spdlog.git
+[submodule "deps/threadpool"]
+	path = deps/threadpool
+	url = https://github.com/jhasse/ThreadPool.git

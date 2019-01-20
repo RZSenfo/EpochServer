@@ -9,8 +9,35 @@ SET( INTERCEPT_LINK_TYPE "static" )
 ##
 ##############################################################################
 
-FILE( GLOB_RECURSE INTERCEPT_PLUGIN_SOURCES *.h *.hpp *.c *.cpp )
-SOURCE_GROUP( "src" FILES ${INTERCEPT_PLUGIN_SOURCES} )
+INCLUDE_DIRECTORIES( public )
+
+SET( PLUGIN_PUBLIC_PATH "${PROJECT_SOURCE_DIR}/src/public" )
+SET( PLUGIN_PRIVATE_PATH "${PROJECT_SOURCE_DIR}/src/private" )
+
+FILE( GLOB PLUGIN_main_SOURCES "${PROJECT_SOURCE_DIR}/src/*.hpp" "${PROJECT_SOURCE_DIR}/src/*.cpp" )
+FILE( GLOB PLUGIN_BattlEye_SOURCES "${PLUGIN_PUBLIC_PATH}/BattlEye/*.hpp" "${PLUGIN_PRIVATE_PATH}/BattlEye/*.cpp" )
+FILE( GLOB PLUGIN_SteamAPI_SOURCES "${PLUGIN_PUBLIC_PATH}/SteamAPI/*.hpp" "${PLUGIN_PRIVATE_PATH}/SteamAPI/*.cpp" )
+FILE( GLOB PLUGIN_external_SOURCES "${PLUGIN_PUBLIC_PATH}/external/*.hpp" "${PLUGIN_PRIVATE_PATH}/external/*.cpp" )
+FILE( GLOB PLUGIN_database_SOURCES "${PLUGIN_PUBLIC_PATH}/database/*.hpp" "${PLUGIN_PRIVATE_PATH}/database/*.cpp" )
+FILE( GLOB PLUGIN_epochserver_SOURCES "${PLUGIN_PUBLIC_PATH}/epochserver/*.hpp" "${PLUGIN_PRIVATE_PATH}/epochserver/*.cpp" )
+FILE( GLOB PLUGIN_threadpool_SOURCES "${PROJECT_SOURCE_DIR}/deps/threadpool/ThreadPool.hpp" "${PROJECT_SOURCE_DIR}/deps/threadpool/ThreadPool.cpp" )
+
+SOURCE_GROUP( "main" FILES ${PLUGIN_main_SOURCES} )
+SOURCE_GROUP( "BattlEye" FILES ${PLUGIN_BattlEye_SOURCES} )
+SOURCE_GROUP( "SteamAPI" FILES ${PLUGIN_SteamAPI_SOURCES} )
+SOURCE_GROUP( "external" FILES ${PLUGIN_external_SOURCES} )
+SOURCE_GROUP( "database" FILES ${PLUGIN_database_SOURCES} )
+SOURCE_GROUP( "epochserver" FILES ${PLUGIN_epochserver_SOURCES} )
+SOURCE_GROUP( "threadpool" FILES ${PLUGIN_threadpool_SOURCES} )
+
+SET( INTERCEPT_PLUGIN_SOURCES
+    ${PLUGIN_main_SOURCES}
+    ${PLUGIN_BattlEye_SOURCES}
+    ${PLUGIN_SteamAPI_SOURCES}
+    ${PLUGIN_external_SOURCES}
+    ${PLUGIN_database_SOURCES}
+    ${PLUGIN_epochserver_SOURCES}
+)
 
 ##############################################################################
 ##
@@ -119,7 +146,8 @@ TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME}
     pcre
     SQLiteCpp
 )
-
+INCLUDE_DIRECTORIES( "${PROJECT_SOURCE_DIR}/deps/spdlog/include" )
+INCLUDE_DIRECTORIES( "${PROJECT_SOURCE_DIR}/deps/threadpool" )
 
 ##############################################################################
 ##
