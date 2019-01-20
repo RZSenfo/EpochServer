@@ -1,102 +1,43 @@
-#include "MySQLConnector.hpp"
+#include <database/MySQLConnector.hpp>
 
 #include <sstream>
 #include <ctime>
 
-thread_local bool is_mainthread = false;
+MySQLConnector::MySQLConnector() {}
 
-//SQL Injection checks
-//if you want to inject stuff from SQF you will need to break out the string for the table, key or value
-//tables and key are escaped in `, value in '
-//these never pop up in sqf by default, ' especially isnt wanted because it breaks parseSimpleArray
-//so we are safe if we exclude these chars from said strings
-#define CHECK_KEY(x) if (x.find('`') != std::string::npos /*|| x.find('´') != std::string::npos*/) return SQF::RET_FAIL();
-#define CHECK_VALUE(x) if (x.find('\'') != std::string::npos) return SQF::RET_FAIL();
-
-MySQLConnector::MySQLConnector() {
-    
-}
-
-MySQLConnector::~MySQLConnector() {
-    
-}
-
-bool beginsWith(const std::string& s1, const std::string& s2) {
-    if (s1.size() < s2.size()) return false;
-    for (size_t i = 0; i < s2.size(); i++) {
-        if (s1[i] != s2[i]) return false;
-    }
-    return true;
-}
-
-/*
-Possible Mysql errors in this case:
-
-select db:
-unknown databse -> solution: try to create the database and reselect, exit if that still fails
-
-connect:
-simply fails -> exit
-
-select:
-Unknown Table -> create table (maybe even async) but return empty
-
-You have an error in your SQL syntax -> return async
-
-insert:
-
-delete:
-
-update:
-
-
-*/
-
-bool transformKey(const std::string& _in, std::string& _table, std::string& _key) {
-    auto splitIdx = _in.find_last_of(':');
-    if (splitIdx == std::string::npos) return false;
-
-    _table = _in.substr(0, splitIdx);
-    for (auto& _x : _table) {
-        if (_x == ':') {
-            _x = '_';
-        }
-    }
-    _key = _in.substr(splitIdx + 1);
-
-    return true;
-}
+MySQLConnector::~MySQLConnector() {}
 
 inline std::string makeCreateTable(const std::string& tableName) {
-    return ("CREATE TABLE `" + tableName + "` (\
-        `key` BIGINT(255) UNSIGNED NOT NULL,\
-        `value` LONGTEXT NULL,\
-        `TTL` TIMESTAMP NULL DEFAULT NULL,\
-        PRIMARY KEY(`key`),\
-        UNIQUE INDEX `UNIQUE` (`key`)\
-        )\
-        ENGINE = InnoDB");
+    return 
 }
 
-bool MySQLConnector::createTable(MYSQL * con, const std::string& tablename) {
+bool MySQLConnector::__createKeyValueTable(const std::string& tableName) {
 
-    std::string execQry = makeCreateTable(tablename);
-
-    if (!mysql_real_query(con, execQry.c_str(), execQry.size())) {
-        return true;
-    }
+    std::string query = (
+        "CREATE TABLE `" + tableName + "` (\
+            `key` BIGINT(255) UNSIGNED NOT NULL,\
+            `value` LONGTEXT NULL,\
+            `TTL` TIMESTAMP NULL DEFAULT NULL,\
+            PRIMARY KEY(`key`),\
+            UNIQUE INDEX `UNIQUE` (`key`)\
+        )\
+        ENGINE = InnoDB"
+    );
+    
+    auto result = con->query(query);
+    
+    if (result->)
+     
     else {
-        this->config.logger->log("Could not create table: " + std::string(mysql_error(con)));
+        LOG("Could not create table: " + std::string(mysql_error(con)));
         return false;
     }
 
 };
 
-bool MySQLConnector::init(EpochlibConfigDB _config) {
+bool MySQLConnector::init(DBConfig _config) {
 
     this->config = _config;
-
-    is_mainthread = true;
 
     mysql_library_init(0, NULL, NULL);
     this->mysql = mysql_init(NULL);
@@ -155,13 +96,13 @@ std::string MySQLConnector::getRange(const std::string& _key, const std::string&
     return get(_key);
 }
 
-MYSQL * MySQLConnector::setupCon() {
+MY_SQL * MySQLConnector::setupCon() {
     //setup connection
     if (is_mainthread) {
         return this->mysql;
     }
     else {
-        MYSQL * con = mysql_init(NULL);
+        MY_SQL * con = mysql_init(NULL);
         //connect
         if (!mysql_real_connect(
             con,

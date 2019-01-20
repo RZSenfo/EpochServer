@@ -1,4 +1,4 @@
-#include "RedisConnector.hpp"
+#include <database/RedisConnector.hpp>
 
 #include <sstream>
 
@@ -28,7 +28,7 @@ RedisConnector::~RedisConnector() {
     }
 }
 
-bool RedisConnector::init(EpochlibConfigDB _config) {
+bool RedisConnector::init(DBConfig _config) {
 
     this->config = _config;
 
