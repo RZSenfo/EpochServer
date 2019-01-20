@@ -1,6 +1,11 @@
-#include "Epochlib.hpp"
-#include "../SteamAPI/SteamAPI.hpp"
-#include "../BattlEye/BEClient.hpp"
+#include <epochserver/epochserver.hpp>
+#include <SteamAPI/SteamAPI.hpp>
+#include <BattlEye/BEClient.hpp>
+#include <database/DBConfig.hpp>
+
+#include <yaml-cpp/yaml.h>
+#include <mariadb++/account.hpp>
+#include <mariadb++/connection.hpp>
 
 #include <cstdlib>
 #include <ctime>
@@ -10,8 +15,10 @@
 #include <sstream>
 #include <fstream>
 #include <memory>
+#include <filesystem>
+#include <random>
 
-bool iequals(const std::string& string1, const std::string& string2) {
+bool __iequals(const std::string& string1, const std::string& string2) {
     return  string1.size() == string2.size()
         &&
         std::equal(
@@ -23,70 +30,117 @@ bool iequals(const std::string& string1, const std::string& string2) {
     });
 }
 
-Epochlib::Epochlib(std::string _configPath, std::string _profilePath, int _outputSize) {
+EpochServer::EpochServer() {
     
     this->initialized = false;
     
-    this->config.hivePath = _configPath;
-    this->config.profilePath = _profilePath;
-    this->config.outputSize = _outputSize;
+    std::vector<DBConfig> dbconfigs;
+    bool error = false;
+    try {
 
-    // Init random
-    std::srand(std::time(0));
+        std::filesystem::path configFilePath("@epochserver/config.yaml");
+        if (!std::filesystem::exists(configFilePath)) {
+            configFilePath = std::filesystem::path("@epochserver/config.yml");
+        }
+        if (!std::filesystem::exists(configFilePath)) {
+            throw std::runtime_error("Configfile not found! Must be @epochserver/config.yml or @epochserver/config.yaml");
+        }
 
-    this->logger = std::make_shared<Logger>(this->config.profilePath + "/EpochServer.log");
+        auto stringpath = configFilePath.string();
+        YAML::Node config = YAML::LoadFile(configFilePath.string());
 
-#ifndef EPOCHLIB_TEST
-#ifndef EPOCHLIB_DISABLE_OFFICALCHECK
-    /* Log & exit if server does not use official server files */
-    if (!this->_isOffialServer()) {
-        this->logger->log("Wrong server files");
-        exit(1);
+        if (!config["connections"].IsMap()) throw std::runtime_error("Connections entry is not a map");
+
+        for (auto& connectionIt : config["connections"]) {
+            auto connectionName = connectionIt.first.as<std::string>();
+            auto connectionBody = connectionIt.second;
+
+            if (!connectionBody["type"]) throw std::runtime_error("Undefined connection value: \"type\" in " + connectionName);
+            if (!connectionBody["ip"]) throw std::runtime_error("Undefined connection value: \"ip\" in " + connectionName);
+            if (!connectionBody["username"]) throw std::runtime_error("Undefined connection value: \"username\"" + connectionName);
+            if (!connectionBody["password"]) throw std::runtime_error("Undefined connection value: \"password\"" + connectionName);
+            if (!connectionBody["database"]) throw std::runtime_error("Undefined connection value: \"database\"" + connectionName);
+
+            DBConfig dbConf;
+            dbConf.connectionName = connectionName;
+            dbConf.ip = connectionBody["ip"].as<std::string>();
+            dbConf.password = connectionBody["password"].as<std::string>();
+            dbConf.user = connectionBody["username"].as<std::string>();
+            dbConf.port = connectionBody["port"].as<int>(3306);
+            dbConf.dbname = connectionBody["database"].as<std::string>();
+
+            auto type = connectionBody["type"].as<std::string>();
+            if (__iequals(type, "mysql")) {
+                dbConf.dbType = DBType::MY_SQL;
+            }
+            else if (__iequals(type, "redis")) {
+                dbConf.dbType = DBType::REDIS;
+            }
+            else if (__iequals(type, "sqlite")) {
+                dbConf.dbType = DBType::SQLITE;
+            }
+            else {
+                throw std::runtime_error("Unknown database type: \"" + type + "\" in " + connectionName);
+            }
+
+            if (connectionBody["statements"].IsMap()) {
+                for (auto& statementIt : config["connections"]) {
+                    auto statementName = statementIt.first.as<std::string>();
+                    auto statementBody = statementIt.second;
+
+                    if (!statementBody["query"]) throw std::runtime_error("Undefined statement value: \"query\" in " + connectionName + "." + statementName);
+
+                    // TODO Statements
+                }
+            }
+            dbconfigs.push_back(dbConf);
+        }
     }
-#endif
-#endif
+    catch (YAML::BadConversion& x) {
+        INFO(x.msg);
+        error = true;
+    }
+    catch (YAML::ParserException& x) {
+        INFO(x.msg);
+        error = true;
+    }
+    catch (std::runtime_error& x) {
+        INFO(x.what);
+        error = true;
+    }
+    
 
     //Try config load
-    if (
-        this->_loadConfig(_configPath + "/EpochServer.ini") 
-        || 
-        this->_loadConfig(_profilePath + "/EpochServer.ini") 
-        || 
-        this->_loadConfig(_configPath + "/epochserver.ini")
-    ) {
+    if (!error) {
         this->initialized = true;
     }
     else {
-        this->logger->log("EpochServer.ini not found in (" + _configPath + ", " + _profilePath + ")");
         std::exit(1);
     }
 
-    
-#ifndef EPOCHLIB_TEST
-    if (iequals(this->config.db.dbType, "Redis")) {
-        this->db = std::make_unique<RedisConnector>();
+    for (auto& config : dbconfigs) {
+        if (this->db->init(this->config.db)) {
+            WARNING("Database connected: " + config.connectionName);
+        }
+        else {
+            WARNING("Could not initialize Database. Check the config!");
+            std::exit(1);
+        }
     }
-    else if (iequals(this->config.db.dbType, "MySQL")) {
-        this->db = std::make_unique<MySQLConnector>();
-    }
-    
-    if (this->db->init(this->config.db)) {
-        this->logger->log(this->config.db.dbType + " Database connected");
-    }
-    else {
-        this->logger->log("Could not initialize Database. Check the config!");
-        std::exit(1);
-    }
-
-
-#endif
-
-}
-Epochlib::~Epochlib() {
-
 }
 
-std::string Epochlib::getConfig() {
+EpochServer::~EpochServer() {
+    
+}
+
+bool EpochServer::callExtensionEntrypoint(char *output, int outputSize, const char *function, const char **args, int argsCnt) {
+
+    
+    hiveOutput = "0.6.0.0";
+    return false;
+}
+
+std::string EpochServer::getConfig() {
     SQF returnSqf;
 
     returnSqf.push_str(this->config.instanceId.c_str());
@@ -95,7 +149,7 @@ std::string Epochlib::getConfig() {
     return returnSqf.toArray();
 }
 
-std::string Epochlib::initPlayerCheck(int64 _steamId) {
+std::string EpochServer::initPlayerCheck(int64 _steamId) {
     bool proceeded = false;
 
     // Not in whitelist
@@ -117,7 +171,7 @@ std::string Epochlib::initPlayerCheck(int64 _steamId) {
                     log << "- VACBanned: " << (document["players"][0]["VACBanned"].GetBool() ? "true" : "false") << std::endl;
                     log << "- DaysSinceLastBan: " << document["players"][0]["DaysSinceLastBan"].GetInt() << std::endl;
                     log << "- NumberOfVACBans: " << document["players"][0]["NumberOfVACBans"].GetInt();
-                    this->logger->log(log.str());
+                    INFO(log.str());
                 }
 
                 if (!proceeded && this->config.steamAPI.vacBanned && document["players"][0]["VACBanned"].GetBool()) {
@@ -125,7 +179,7 @@ std::string Epochlib::initPlayerCheck(int64 _steamId) {
                         std::stringstream log;
                         log << "[SteamAPI] VAC ban " << _steamId << std::endl;
                         log << "- VACBanned: " << (document["players"][0]["VACBanned"].GetBool() ? "true" : "false");
-                        this->logger->log(log.str());
+                        INFO(log.str());
                     }
 
                     this->addBan(_steamId, "VAC Ban");
@@ -136,7 +190,7 @@ std::string Epochlib::initPlayerCheck(int64 _steamId) {
                         std::stringstream log;
                         log << "[SteamAPI] VAC ban " << _steamId << std::endl;
                         log << "- DaysSinceLastBan: " << document["players"][0]["DaysSinceLastBan"].GetInt();
-                        this->logger->log(log.str());
+                        INFO(log.str());
                     }
 
                     this->addBan(_steamId, "VAC Ban");
@@ -147,7 +201,7 @@ std::string Epochlib::initPlayerCheck(int64 _steamId) {
                         std::stringstream log;
                         log << "[SteamAPI] VAC ban " << _steamId << std::endl;
                         log << "- NumberOfVACBans: " << document["players"][0]["NumberOfVACBans"].GetInt();
-                        this->logger->log(log.str());
+                        INFO(log.str());
                     }
 
                     this->addBan(_steamId, "VAC Ban");
@@ -161,7 +215,7 @@ std::string Epochlib::initPlayerCheck(int64 _steamId) {
                     std::stringstream log;
                     log << "[SteamAPI] Player check " << _steamId << std::endl;
                     log << "- timecreated: " << document["response"]["players"][0]["timecreated"].GetInt();
-                    this->logger->log(log.str());
+                    INFO(log.str());
                 }
 
                 if (!proceeded && this->config.steamAPI.playerAllowOlderThan > 0) {
@@ -173,7 +227,7 @@ std::string Epochlib::initPlayerCheck(int64 _steamId) {
                             log << "[SteamAPI] Player ban " << _steamId << std::endl;
                             log << "- timecreated: " << document["response"]["players"][0]["timecreated"].GetInt() << std::endl;
                             log << "- current: " << currentTime;
-                            this->logger->log(log.str());
+                            INFO(log.str());
                         }
 
                         this->addBan(_steamId, "New account filter");
@@ -194,7 +248,7 @@ std::string Epochlib::initPlayerCheck(int64 _steamId) {
     return "";
 }
 
-std::string Epochlib::addBan(int64 _steamId, const std::string& _reason) {
+std::string EpochServer::addBan(int64 _steamId, const std::string& _reason) {
     std::string battleyeGUID = this->_getBattlEyeGUID(_steamId);
     std::string bansFilename = this->config.battlEyePath + "/bans.txt";
     SQF returnSQF;
@@ -204,12 +258,12 @@ std::string Epochlib::addBan(int64 _steamId, const std::string& _reason) {
         bansFile << battleyeGUID << " -1 " << _reason << std::endl;
         bansFile.close();
 
-                this->logger->log("BEClient: try to connect " + this->config.battlEye.ip);
+                INFO("BEClient: try to connect " + this->config.battlEye.ip);
                 BEClient bec     (this->config.battlEye.ip.c_str(), this->config.battlEye.port);
                 bec.sendLogin    (this->config.battlEye.password.c_str());
                 bec.readResponse (BE_LOGIN);
                 if (bec.isLoggedIn()) {
-                    this->logger->log("BEClient: logged in!");
+                    INFO("BEClient: logged in!");
                     bec.sendCommand  ("loadBans");
                     bec.readResponse (BE_COMMAND);
                 
@@ -224,7 +278,7 @@ std::string Epochlib::addBan(int64 _steamId, const std::string& _reason) {
                         bec.readResponse (BE_COMMAND);
                     }
                 } else {
-                    this->logger->log("BEClient: login failed!");
+                    INFO("BEClient: login failed!");
                 }
                 bec.disconnect();
 
@@ -239,7 +293,7 @@ std::string Epochlib::addBan(int64 _steamId, const std::string& _reason) {
     return returnSQF.toArray();
 }
 
-std::string Epochlib::updatePublicVariable(const std::vector<std::string>& _whitelistStrings) {
+std::string EpochServer::updatePublicVariable(const std::vector<std::string>& _whitelistStrings) {
     std::string pvFilename = this->config.battlEyePath + "/publicvariable.txt";
     std::string pvContent = "";
     bool pvFileOriginalFound = false;
@@ -279,7 +333,7 @@ std::string Epochlib::updatePublicVariable(const std::vector<std::string>& _whit
         else {
             pvFileCurrent.close();
             returnSQF.push_str("0");
-            this->logger->log("publicvariable.txt not found in " + this->config.battlEyePath);
+            INFO("publicvariable.txt not found in " + this->config.battlEyePath);
             return returnSQF.toArray();
         }
 
@@ -312,22 +366,22 @@ std::string Epochlib::updatePublicVariable(const std::vector<std::string>& _whit
     }
     pvFileNew.close();
     
-    this->logger->log("BEClient: try to connect " + this->config.battlEye.ip);
+    INFO("BEClient: try to connect " + this->config.battlEye.ip);
     BEClient bec     (this->config.battlEye.ip.c_str(), this->config.battlEye.port);
     bec.sendLogin    (this->config.battlEye.password.c_str());
     bec.readResponse (BE_LOGIN);
     if (bec.isLoggedIn()) {
-        this->logger->log("BEClient: logged in!");
+        INFO("BEClient: logged in!");
         bec.sendCommand  ("loadEvents");
         bec.readResponse (BE_COMMAND);
     } else {
-        this->logger->log("BEClient: login failed!");
+        INFO("BEClient: login failed!");
     }
     bec.disconnect();
 
     return returnSQF.toArray();
 }
-std::string Epochlib::getRandomString(int _stringCount) {
+std::string EpochServer::getRandomString(int _stringCount) {
     SQF returnSQF;
     std::vector<std::string> randomStrings;
 
@@ -364,7 +418,7 @@ std::string Epochlib::getRandomString(int _stringCount) {
     }
 }
 
-std::string Epochlib::getStringMd5(const std::vector<std::string>& _stringsToHash) {
+std::string EpochServer::getStringMd5(const std::vector<std::string>& _stringsToHash) {
     SQF returnSQF;
     
     for (auto it = _stringsToHash.begin(); it != _stringsToHash.end(); ++it) {
@@ -375,7 +429,7 @@ std::string Epochlib::getStringMd5(const std::vector<std::string>& _stringsToHas
     return returnSQF.toArray();
 }
 
-std::string Epochlib::getCurrentTime() {
+std::string EpochServer::getCurrentTime() {
     SQF returnSQF;
     char buffer[8];
     size_t bufferSize;
@@ -404,7 +458,7 @@ std::string Epochlib::getCurrentTime() {
     return returnSQF.toArray();
 }
 
-std::string Epochlib::getServerMD5() {
+std::string EpochServer::getServerMD5() {
 
     std::string serverMD5;
     std::string addonPath = this->config.hivePath + "/addons/a3_epoch_server.pbo";
@@ -428,7 +482,7 @@ std::string Epochlib::getServerMD5() {
     return serverMD5;
 }
 
-std::string Epochlib::_getBattlEyeGUID(int64 _steamId) {
+std::string EpochServer::_getBattlEyeGUID(int64 _steamId) {
     uint8 i = 0;
     uint8 parts[8] = { 0 };
 
@@ -448,16 +502,7 @@ std::string Epochlib::_getBattlEyeGUID(int64 _steamId) {
     return md5.hexdigest();
 }
 
-bool Epochlib::_fileExist(const std::string& _filename) {
-    
-    std::ifstream file(_filename.c_str());
-    bool exists = file.good();
-    file.close();
-
-    return exists;
-}
-
-bool Epochlib::_loadConfig(const std::string& configFilename) {
+bool EpochServer::_loadConfig(const std::string& configFilename) {
     
     if (this->_fileExist(configFilename)) {
         
@@ -499,42 +544,42 @@ bool Epochlib::_loadConfig(const std::string& configFilename) {
     }
 }
 
-bool Epochlib::_isOffialServer() {
-    return this->getServerMD5() == EPOCHLIB_SERVERMD5 ? true : false;
+bool EpochServer::_isOffialServer() {
+    return this->getServerMD5() == EpochServer_SERVERMD5 ? true : false;
 }
 
 // Battleye Integration
 
-void Epochlib::beBroadcastMessage (const std::string& msg) {
+void EpochServer::beBroadcastMessage (const std::string& msg) {
     if (msg.empty()) 
         return;
 
-    this->logger->log("BEClient: try to connect " + this->config.battlEye.ip);
+    INFO("BEClient: try to connect " + this->config.battlEye.ip);
     BEClient bec     (this->config.battlEye.ip.c_str(), this->config.battlEye.port);    
     bec.sendLogin    (this->config.battlEye.password.c_str());
     bec.readResponse (BE_LOGIN);
     if (bec.isLoggedIn()) {
-        this->logger->log("BEClient: logged in!");
+        INFO("BEClient: logged in!");
         std::stringstream ss;
         ss << "say -1 " << msg;
         bec.sendCommand  (ss.str().c_str());
         bec.readResponse (BE_COMMAND);
     } else {
-        this->logger->log("BEClient: login failed!");
+        INFO("BEClient: login failed!");
     }
     bec.disconnect();
 }
 
-void Epochlib::beKick (const std::string& playerUID, const std::string& msg) {
+void EpochServer::beKick (const std::string& playerUID, const std::string& msg) {
     if (playerUID.empty() || msg.empty()) 
         return;
     
-    this->logger->log("BEClient: try to connect " + this->config.battlEye.ip);
+    INFO("BEClient: try to connect " + this->config.battlEye.ip);
     BEClient bec     (this->config.battlEye.ip.c_str(), this->config.battlEye.port);
     bec.sendLogin    (this->config.battlEye.password.c_str());
     bec.readResponse (BE_LOGIN);
     if (bec.isLoggedIn()) {
-        this->logger->log("BEClient: logged in!");
+        INFO("BEClient: logged in!");
         bec.sendCommand  ("players");
         bec.readResponse (BE_COMMAND);
         
@@ -550,21 +595,21 @@ void Epochlib::beKick (const std::string& playerUID, const std::string& msg) {
         bec.sendCommand  (ss.str().c_str());
         bec.readResponse (BE_COMMAND);
         } else {
-            this->logger->log("BEClient: login failed!");
+            INFO("BEClient: login failed!");
         }
     bec.disconnect();
 }
 
-void Epochlib::beBan(const std::string& playerUID, const std::string& msg, const std::string& duration) {
+void EpochServer::beBan(const std::string& playerUID, const std::string& msg, const std::string& duration) {
     if (playerUID.empty() || msg.empty())
         return;
             
-    this->logger->log("BEClient: try to connect " + this->config.battlEye.ip);
+    INFO("BEClient: try to connect " + this->config.battlEye.ip);
     BEClient bec     (this->config.battlEye.ip.c_str(), this->config.battlEye.port);
     bec.sendLogin    (this->config.battlEye.password.c_str());
     bec.readResponse (BE_LOGIN);
     if (bec.isLoggedIn()) {
-        this->logger->log("BEClient: logged in!");
+        INFO("BEClient: logged in!");
         bec.sendCommand  ("players");
         bec.readResponse (BE_COMMAND);
 
@@ -580,56 +625,56 @@ void Epochlib::beBan(const std::string& playerUID, const std::string& msg, const
         bec.sendCommand  (ss.str().c_str());
         bec.readResponse (BE_COMMAND);
     } else {
-        this->logger->log("BEClient: login failed!");
+        INFO("BEClient: login failed!");
     }
     bec.disconnect   ();
 }
 
-void Epochlib::beShutdown() {
-    this->logger->log("BEClient: try to connect " + this->config.battlEye.ip);
+void EpochServer::beShutdown() {
+    INFO("BEClient: try to connect " + this->config.battlEye.ip);
     BEClient bec     (this->config.battlEye.ip.c_str(), this->config.battlEye.port);
     bec.sendLogin    (this->config.battlEye.password.c_str());
     bec.readResponse (BE_LOGIN);
     if (bec.isLoggedIn()) {
-        this->logger->log("BEClient: logged in!");
+        INFO("BEClient: logged in!");
         bec.sendCommand  ("#shutdown");
         bec.readResponse (BE_COMMAND);
     } else {
-        this->logger->log("BEClient: login failed!");
+        INFO("BEClient: login failed!");
     }    
     bec.disconnect   ();
 }
 
-void Epochlib::beLock() {
-    this->logger->log("BEClient: try to connect " + this->config.battlEye.ip);
+void EpochServer::beLock() {
+    INFO("BEClient: try to connect " + this->config.battlEye.ip);
     BEClient bec(this->config.battlEye.ip.c_str(), this->config.battlEye.port);
     bec.sendLogin(this->config.battlEye.password.c_str());
     bec.readResponse(BE_LOGIN);
     if (bec.isLoggedIn()) {
-        this->logger->log("BEClient: logged in!");
+        INFO("BEClient: logged in!");
         bec.sendCommand("#lock");
         bec.readResponse(BE_COMMAND);
     } else {
-        this->logger->log("BEClient: login failed!");
+        INFO("BEClient: login failed!");
     }
     bec.disconnect();
 }
 
-void Epochlib::beUnlock() {
-    this->logger->log("BEClient: try to connect " + this->config.battlEye.ip);
+void EpochServer::beUnlock() {
+    INFO("BEClient: try to connect " + this->config.battlEye.ip);
     BEClient bec(this->config.battlEye.ip.c_str(), this->config.battlEye.port);
     bec.sendLogin(this->config.battlEye.password.c_str());
     bec.readResponse(BE_LOGIN);
     if (bec.isLoggedIn()) {
-        this->logger->log("BEClient: logged in!");
+        INFO("BEClient: logged in!");
         bec.sendCommand("#unlock");
         bec.readResponse(BE_COMMAND);
     } else {
-        this->logger->log("BEClient: login failed!");
+        INFO("BEClient: login failed!");
     }
     bec.disconnect();
 }
 
-void Epochlib::log(const std::string& log) {
-    this->logger->log(log);
+void EpochServer::log(const std::string& log) {
+    INFO(log);
 }

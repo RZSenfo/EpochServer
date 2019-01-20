@@ -30,7 +30,7 @@ documentation and/or software.
 
 */
 /* interface header */
-#include "md5.hpp"
+#include <external/md5.hpp>
 
 /* system implementation headers */
 #include <cstdio>

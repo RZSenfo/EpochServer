@@ -1,60 +1,37 @@
 #ifndef __EPOCHLIB_H__
 #define __EPOCHLIB_H__
 
-/* Default Epochlib defines */
-#include "defines.hpp"
+#include <database/DBWorker.hpp>
+#include <vector>
 
-#include "Logger.hpp"
-#include "RedisConnector.hpp"
-#include "MySQLConnector.hpp"
-#include "SQF.hpp"
-#include "../SteamAPI/SteamAPI.hpp"
-#include "../external/md5.hpp"
-#include "../external/ConfigFile.hpp"
-#include <string>
-#include <sstream>
-#include <fstream>
-#include <ctime>
-#include <mutex>
-#include <regex>
-#include <memory>
-
-#define EPOCHLIB_SERVERMD5 "8497e70dafab88ea432338fee8c86579" //"426a526f91eea855dc889d21205e574c"
-
-/* !!! TESTING DO NOT ENABLE IN PRODUCTION !!! */
-//#define EPOCHLIB_TEST
-#define EPOCHLIB_DISABLE_OFFICALCHECK
-
-class Epochlib {
+class EpochServer {
 private:
     
-    bool initialized;
-    EpochlibConfig config;
-
-    std::shared_ptr<Logger> logger;
-
-    //Helper
-    bool _fileExist(const std::string& FileName);
-    bool _loadConfig(const std::string& ConfigFilename);
-    std::string _getBattlEyeGUID(int64 SteamId);
-    bool _isOffialServer();
-        
-    //MySQL specifics
-    // -
-
-    //Antihack
-    std::mutex steamIdWhitelistMutex;
-    std::vector<int64> steamIdWhitelist;
-
-public:
+    bool initialized = false;
     
-    Epochlib(std::string configPath, std::string profilePath, int outputSize);
-    ~Epochlib();
+    /* 
+     * whitelists
+     */
+    std::mutex steamIdWhitelistMutex;
+    std::vector<int64> steamIdWhitelist = {};
 
     /*
      * Database Access
      */
-    std::unique_ptr<DBConnector> db;
+    std::vector<std::pair<std::string, DBWorker> > connections = {};
+
+    /*
+     *  Helpers
+     */
+    bool _loadConfig(const std::string& ConfigFilename);
+    std::string _getBattlEyeGUID(int64 SteamId);    
+
+public:
+    
+    EpochServer();
+    ~EpochServer();
+
+    int callExtensionEntrypoint(char *output, int outputSize, const char *function, const char **args, int argsCnt);
 
     /* 
      *  Get Config

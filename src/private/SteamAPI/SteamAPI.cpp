@@ -1,4 +1,4 @@
-#include "SteamAPI.hpp"
+#include <SteamAPI/SteamAPI.hpp>
 
 /*
 #define WSASetLastError WSASetLastError

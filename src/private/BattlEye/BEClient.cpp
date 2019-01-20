@@ -9,7 +9,7 @@
 // * loadBans
 // * loadEvents
 //
-#include "BEClient.hpp"
+#include <BattlEye/BEClient.hpp>
 
 
 #include <stdlib.h>

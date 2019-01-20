@@ -4,25 +4,7 @@
 #include <string>
 #include <memory>
 
-#include "Logger.hpp"
 
-typedef unsigned char uint8;
-typedef long long int int64;
-
-struct EpochlibConfigDB {
-    
-    std::string dbType;
-    
-    std::string ip;
-    unsigned short int port;
-    std::string user;
-    std::string password;
-    std::string dbIndex;
-    
-    std::shared_ptr<Logger> logger;
-    short int logAbuse;
-    int logLimit;
-};
 
 struct EpochlibConfigSteamAPI {
     short int logging;
@@ -47,10 +29,6 @@ struct EpochlibConfig {
     std::string battlEyePath;
     EpochlibConfigBattlEye battlEye;
     
-    EpochlibConfigDB db;
-    std::string hivePath;
-    
-    std::string profilePath;
     EpochlibConfigSteamAPI steamAPI;
     std::string instanceId;
     short int logAbuse;
@@ -62,4 +40,5 @@ struct EpochlibDBExecute {
     bool success;
     std::string message;
 };
+
 #endif
