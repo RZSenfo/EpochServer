@@ -180,48 +180,14 @@ ADD_SUBDIRECTORY( "${PROJECT_SOURCE_DIR}/deps/mariadbpp" )
 
 ##############################################################################
 ##
-## build hiredis on linux
+## redis
 ##
 ##############################################################################
 
-if(UNIX)
-    MESSAGE( STATUS "BUILDING hiredis CONNECTOR...")
-    EXECUTE_PROCESS(
-        COMMAND "make" CFLAGS=-m32 LDFLAGS=-m32
-        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/deps/hiredis-linux"
-        RESULT_VARIABLE CMD_RESULT
-        OUTPUT_VARIABLE CMD_OUTPUT
-        ERROR_VARIABLE CMD_ERROR  
-    )
-    MESSAGE( STATUS "CMD_RESULT:" ${CMD_RESULT} )
-    MESSAGE( STATUS "CMD_ERROR:" ${CMD_ERROR} )
-    MESSAGE( STATUS "CMD_OUTPUT:" ${CMD_OUTPUT} )
-    MESSAGE( STATUS "BUILDING hiredis CONNECTOR DONE" )
-
-    SET( CMAKE_CXX_FLAGS "-m32 -march=i686 ${CMAKE_CXX_FLAGS}" )
-    SET( CMAKE_C_FLAGS "-m32 -march=i686 ${CMAKE_C_FLAGS}" )
-    SET( CMAKE_SHARED_LINKER_FLAGS "-m32 -march=i686 ${CMAKE_SHARED_LINKER_FLAGS}" )
-endif()
-
-##############################################################################
-##
-## pcre
-##
-##############################################################################
-
-SET( PCRE_STATIC_RUNTIME ON CACHE BOOL "" FORCE )
-SET( PCRE_BUILD_TESTS OFF CACHE BOOL "" FORCE )
-SET( PCRE_BUILD_PCREGREP OFF CACHE BOOL "" FORCE )
-SET( PCRE_BUILD_PCRECPP OFF CACHE BOOL "" FORCE )
-
-ADD_SUBDIRECTORY( "${PROJECT_SOURCE_DIR}/deps/pcre" )
-INCLUDE_DIRECTORIES( ${PROJECT_SOURCE_DIR}/deps/pcre )
-
-CONFIGURE_FILE(
-    ${PROJECT_SOURCE_DIR}/deps/pcre/pcre.h.in
-    ${PROJECT_SOURCE_DIR}/deps/pcre/pcre.h 
-    COPYONLY
-)
+SET( BUILD_EXAMPLES ON CACHE BOOL "no redis examples" FORCE )
+SET( BUILD_TESTS ON CACHE BOOL "no redis tests" FORCE )
+ADD_SUBDIRECTORY( "${PROJECT_SOURCE_DIR}/deps/cpp_redis" )
+INCLUDE_DIRECTORIES( ${PROJECT_SOURCE_DIR}/deps/cpp_redis/include )
 
 ##############################################################################
 ##
@@ -229,9 +195,9 @@ CONFIGURE_FILE(
 ##
 ##############################################################################
 
-SET( RAPIDJSON_BUILD_DOC OFF CACHE BOOL "" FORCE )
-SET( RAPIDJSON_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE )
-SET( RAPIDJSON_BUILD_TESTS OFF CACHE BOOL "" FORCE )
+SET( RAPIDJSON_BUILD_DOC OFF CACHE BOOL "no json doc" FORCE )
+SET( RAPIDJSON_BUILD_EXAMPLES OFF CACHE BOOL "no json example" FORCE )
+SET( RAPIDJSON_BUILD_TESTS OFF CACHE BOOL "no json tests" FORCE )
 ADD_SUBDIRECTORY( "${PROJECT_SOURCE_DIR}/deps/rapidjson" )
 INCLUDE_DIRECTORIES( ${PROJECT_SOURCE_DIR}/deps/rapidjson/include )
 
@@ -241,8 +207,8 @@ INCLUDE_DIRECTORIES( ${PROJECT_SOURCE_DIR}/deps/rapidjson/include )
 ##
 ##############################################################################
 
-SET( SQLITECPP_RUN_CPPLINT OFF CACHE BOOL "" FORCE )
-SET( SQLITECPP_RUN_CPPCHECK OFF CACHE BOOL "" FORCE )
+SET( SQLITECPP_RUN_CPPLINT OFF CACHE BOOL "no run cpplint" FORCE )
+SET( SQLITECPP_RUN_CPPCHECK OFF CACHE BOOL "no run cppcheck" FORCE )
 ADD_SUBDIRECTORY( "${PROJECT_SOURCE_DIR}/deps/sqlitecpp" )
 INCLUDE_DIRECTORIES( ${PROJECT_SOURCE_DIR}/deps/sqlitecpp )
 
