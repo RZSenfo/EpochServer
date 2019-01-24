@@ -1,9 +1,6 @@
-[submodule "deps/hiredis-linux"]
-	path = deps/hiredis-linux
-	url = https://github.com/redis/hiredis.git
-[submodule "deps/pcre"]
-	path = deps/pcre
-	url = https://github.com/svn2github/pcre.git
+[submodule "deps/cpp_redis"]
+	path = deps/cpp_redis
+	url = https://github.com/cpp-redis/cpp_redis.git
 [submodule "deps/intercept"]
 	path = deps/intercept
 	url = https://github.com/intercept/intercept.git
