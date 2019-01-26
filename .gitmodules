@@ -32,4 +32,4 @@
 	url = "https://github.com/yhirose/cpp-httplib.git"
 [submodule "deps/asio"]
 	path = "deps/asio"
-	url = "https://github.com/corvusoft/asio-dependency.git"
+	url = "https://github.com/sailfish009/asio.git"
