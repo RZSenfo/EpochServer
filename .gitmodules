@@ -27,3 +27,9 @@
 [submodule "deps/threadpool"]
 	path = deps/threadpool
 	url = https://github.com/RZSenfo/ThreadPool.git
+[submodule "deps/cpp-httplib"]
+	path = "deps/cpp-httplib"
+	url = "https://github.com/yhirose/cpp-httplib.git"
+[submodule "deps/asio"]
+	path = "deps/asio"
+	url = "https://github.com/corvusoft/asio-dependency.git"
