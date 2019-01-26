@@ -9,14 +9,6 @@
     #include <unistd.h>
     #include <string.h>
 #endif
-#include <sstream>
-#include <fstream>
-#include <vector>
-#include <thread>
-#include <queue>
-#include <atomic>
-#include <mutex>
-#include <condition_variable>
 
 #include <main.hpp>
 #include <epochserver/epochserver.hpp>
@@ -57,22 +49,47 @@ void RVExtension(char *_output, int _outputSize, char *_function) {
     strncpy_s(_output, _outputSize, "Unsupported", _TRUNCATE);
 }
 
+void extensionInit() {
+    
+    //init threadpool
+    auto hwc = std::thread::hardware_concurrency();
+    if (hwc != 0u) {
+        hwc = hwc > 4 ? std::max(4u, hwc/2u) : hwc;
+    }
+    else {
+        hwc = 1u;
+    }
+    threadpool = std::make_unique<ThreadPool>(hwc);
+
+    // init logging
+    server = std::make_unique<EpochServer>();
+    logging::logfile = std::shared_ptr<spdlog::logger>{};
+    spdlog::set_level(spdlog::level::debug);
+    logging::logfile = spdlog::rotating_logger_mt(
+        "logfile",
+        "logs/epochserver.log",
+        1024000,
+        3
+    );
+    logging::logfile->flush_on(spdlog::level::debug);
+    spdlog::set_pattern("[%H:%M:%S]-{%l}- %v");
+
+    server = std::make_unique<EpochServer>();
+}
+
+void extensionDeInit() {
+    logging::logfile->flush();
+    spdlog::drop_all();
+
+    threadpool.reset();
+}
+
 #ifdef WIN32
 #include <Windows.h>
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved) {
     switch (ul_reason_for_call) {
     case DLL_PROCESS_ATTACH: {
-        server = std::make_unique<EpochServer>();
-        logging::logfile = std::shared_ptr<spdlog::logger>{};
-        spdlog::set_level(spdlog::level::debug);
-        logging::logfile = spdlog::rotating_logger_mt(
-            "logfile",
-            "logs/epochserver.log",
-            1024000,
-            3
-        );
-        logging::logfile->flush_on(spdlog::level::debug);
-        spdlog::set_pattern("[%H:%M:%S]-{%l}- %v");
+        extensionInit();
         break;
     }
     case DLL_THREAD_ATTACH: {
@@ -82,8 +99,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
         break;
     }
     case DLL_PROCESS_DETACH: {
-        logging::logfile->flush();
-        spdlog::drop_all();
+        extensionDeInit();
         break;
     }
     }
@@ -95,9 +111,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
 
 #include <dlfcn.h>
 static void __attribute__((constructor)) dll_load(void) {
-    server = std::make_unique<EpochServer>();
+    extensionInit();
 }
 
 static void __attribute__((destructor)) dll_unload(void) {
+    extensionDeInit();
 }
 #endif
