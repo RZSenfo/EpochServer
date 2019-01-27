@@ -137,7 +137,7 @@ uint32_t BEClient::getCRC32 (unsigned char *_addr, int _size) {
     return ~result;
 }
 
-bool BEClient::sendPacket (unsigned char cmd, const char* data) {
+bool BEClient::sendPacket(unsigned char cmd, const char* data) {
     char buf[2048];
     int  size = 0;
     memset ((void*)buf, 0, sizeof(buf));
