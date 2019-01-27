@@ -2,31 +2,50 @@
 #define __STEAMAPI_H__
 
 #include <string>
-#include <happyhttp.h>
-#include <rapidjson/rapidjson.h>
-#include <rapidjson/document.h>
 
+// https://wiki.teamfortress.com/wiki/WebAPI/GetPlayerSummaries
+struct SteamPlayerSummary {
+    unsigned long steamid;
+    short communityvisibilitystate;
+    short profilestate;
+    std::string personaname;
+    long lastlogoff;
+    std::string profileurl;
+    short personastate;
 
-struct SteamAPIResponseContent {
-    short int Status;
-    size_t ByteCount;
-    std::string Content;
+    //optional
+    long long timecreated;
 };
-typedef std::map<std::string, std::string> SteamAPIQuery;
+
+// https://wiki.teamfortress.com/wiki/WebAPI/GetPlayerBans
+struct SteamPlayerBans {
+    unsigned long steamId;
+    bool CommunityBanned;
+    bool VACBanned;
+    short NumberOfGameBans;
+    short DaysSinceLastBan;
+    std::string EconomyBan;
+};
+
+typedef std::pair< std::string, std::string> RequestParam;
+
+struct SteamAPIResponse {
+    int status;
+    std::string content;
+};
 
 class SteamAPI {
-public:
+private:
     std::string _apiKey;
-    SteamAPIResponseContent *_responseContent;
 
-    bool _sendRequest(std::string URI, SteamAPIQuery Query);
+    SteamAPIResponse _sendRequest(const std::string& path, const std::vector<RequestParam>& params);
 
 public:
-    SteamAPI(std::string APIKey);
+    SteamAPI(const std::string& APIKey);
     ~SteamAPI();
 
-    bool GetPlayerBans(std::string SteamIds, rapidjson::Document *Document);
-    bool GetPlayerSummaries(std::string SteamIds, rapidjson::Document *Document);
+    SteamPlayerBans GetPlayerBans(const std::string& steamIds);
+    SteamPlayerSummary GetPlayerSummaries(const std::string& steamIds);
 };
 
 #endif

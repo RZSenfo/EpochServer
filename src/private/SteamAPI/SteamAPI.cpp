@@ -1,100 +1,108 @@
 #include <SteamAPI/SteamAPI.hpp>
 
-/*
-#define WSASetLastError WSASetLastError
-#define WSAGetLastError WSAGetLastError
-#define WSAIoctl WSAIoctl
-#define WSASend WSASend
-#define WSARecv WSARecv
-#define WSACleanup WSACleanup
-#define WSAGetOverlappedResult WSAGetOverlappedResult
-#define WSADuplicateSocket WSADuplicateSocket
-#define WSASocket WSASocket
-*/
-
-
+#include <httplib.h>
+#undef GetObject
+#include <rapidjson/rapidjson.h>
+#include <rapidjson/document.h>
+#include <rapidjson/error/error.h>
 
 #include <sstream>
 #include <fstream>
 
-void SteamAPI_CB_httpBegin(const happyhttp::Response *_response, void *_userdata) {
-    SteamAPI *_this = (SteamAPI*)(_userdata);
 
-    _this->_responseContent = new SteamAPIResponseContent;
-    _this->_responseContent->ByteCount = 0;
-    _this->_responseContent->Status = _response->getstatus();
-}
-void SteamAPI_CB_httpGetData(const happyhttp::Response *_response, void *_userdata, const unsigned char *_data, int _n) {
-    SteamAPI *_this = (SteamAPI*)(_userdata);
-
-    _this->_responseContent->Content.append((const char*)_data, _n);
-}
-void SteamAPI_CB_httpComplete(const happyhttp::Response *_response, void *_userdata) { }
-
-SteamAPI::SteamAPI(std::string _apiKey) {
+SteamAPI::SteamAPI(const std::string& _apiKey) {
     this->_apiKey = _apiKey;
-    this->_responseContent = NULL;
 }
+
 SteamAPI::~SteamAPI() {
-    if (this->_responseContent != NULL) {
-        delete this->_responseContent;
-    }
 }
 
-bool SteamAPI::GetPlayerBans(std::string _steamIds, rapidjson::Document *_document) {
-    SteamAPIQuery Query;
-    Query.insert(std::pair<std::string, std::string>("steamids", _steamIds));
+SteamPlayerBans SteamAPI::GetPlayerBans(const std::string& _steamIds) {
+    
+    auto resp = this->_sendRequest("/ISteamUser/GetPlayerBans/v1/", { RequestParam("steamids", _steamIds) });
 
-    if (this->_sendRequest("/ISteamUser/GetPlayerBans/v1/", Query)) {
-        _document->Parse(this->_responseContent->Content.c_str());
-        return true;
+    SteamPlayerBans response;
+
+    if (resp.status == 200) {
+
+        rapidjson::Document document;
+        rapidjson::ParseResult ok = document.Parse(resp.content.c_str());
+
+        if (ok) {
+
+            auto players = document["players"].GetArray();
+            if (players.Size() > 0) {
+                auto player = players[0].GetObject();
+
+                response.DaysSinceLastBan = player["DaysSinceLastBan"].GetInt();
+                response.CommunityBanned = player["CommunityBanned"].GetBool();
+                response.EconomyBan = player["EconomyBan"].GetString();
+                response.NumberOfGameBans = player["NumberOfGameBans"].GetInt();
+                response.steamId = player["steamId"].GetUint64();
+                response.VACBanned = player["VACBanned"].GetBool();
+            }
+        }
     }
-    else {
-        return false;
-    }
+    return response;
+
 }
 
-bool SteamAPI::GetPlayerSummaries(std::string _steamIds, rapidjson::Document *_document) {
-    SteamAPIQuery Query;
-    Query.insert(std::pair<std::string, std::string>("steamids", _steamIds));
+SteamPlayerSummary SteamAPI::GetPlayerSummaries(const std::string& _steamIds) {
+    
+    auto resp = this->_sendRequest("/ISteamUser/GetPlayerSummaries/v0002/", {});
 
-    if (this->_sendRequest("/ISteamUser/GetPlayerSummaries/v0002/", Query)) {
-        _document->Parse(this->_responseContent->Content.c_str());
-        return true;
+    SteamPlayerSummary response;
+
+    if (resp.status == 200) {
+
+        rapidjson::Document document;
+        rapidjson::ParseResult ok = document.Parse(resp.content.c_str());
+
+        if (ok) {
+
+            auto players = document["players"].GetArray();
+            if (players.Size() > 0) {
+                auto player = players[0].GetObject();
+                
+                response.communityvisibilitystate = player["communityvisibilitystate"].GetInt();
+                response.lastlogoff = player["lastlogoff"].GetUint64();
+                response.personaname = player["personaname"].GetString();
+                response.personastate = player["personastate"].GetInt();
+                response.profilestate = player["profilestate"].GetInt();
+                response.profileurl = player["profileurl"].GetString();
+                response.steamid = player["steamid"].GetUint64();
+
+                if (player.HasMember("timecreated")) {
+                    response.timecreated = player["timecreated"].GetUint64();
+                }
+                else {
+                    response.timecreated = -1;
+                }
+            }
+        }
     }
-    else {
-        return false;
-    }
+    return response;
+
 }
 
-bool SteamAPI::_sendRequest(std::string _uri, SteamAPIQuery _query) {
+SteamAPIResponse SteamAPI::_sendRequest(const std::string& path, const std::vector<RequestParam>& params) {
 
     // Add API key
-    _query.insert(_query.begin(), std::pair<std::string, std::string>("key", this->_apiKey));
+    std::string fullpath = path + "?key=" + this->_apiKey;
 
     // Build query
-    std::stringstream queryStream;
-    for (SteamAPIQuery::iterator it = _query.begin(); it != _query.end(); ++it) {
-        if (queryStream.rdbuf()->in_avail() > 0) {
-            queryStream << "&";
-        }
-        queryStream << it->first << "=" << it->second;
+    for (auto& x : params) {
+        fullpath += "&" + x.first + "=" + x.second;
     }
-    std::string query = _uri + "?" + queryStream.str();
-
     
     // Setup HTTP request
-    happyhttp::Connection connection("api.steampowered.com", 80);
-    connection.setcallbacks(SteamAPI_CB_httpBegin, SteamAPI_CB_httpGetData, SteamAPI_CB_httpComplete, this);
-    if (connection.request("GET", query.c_str())) {
-        return false;
-    }
+    httplib::Client clt("api.steampowered.com");
 
-    while (connection.outstanding()) {
-        if (connection.pump()) {
-            return false;
-        }
-    }
+    auto response = clt.Get(fullpath.c_str());
 
-    return this->_responseContent->Status == happyhttp::OK ? true : false;
+    SteamAPIResponse resp;
+    resp.content = response->body;
+    resp.status = response->status;
+
+    return resp;
 }
