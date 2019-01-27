@@ -184,8 +184,8 @@ ADD_SUBDIRECTORY( "${PROJECT_SOURCE_DIR}/deps/mariadbpp" )
 ##
 ##############################################################################
 
-SET( BUILD_EXAMPLES ON CACHE BOOL "no redis examples" FORCE )
-SET( BUILD_TESTS ON CACHE BOOL "no redis tests" FORCE )
+SET( BUILD_EXAMPLES OFF CACHE BOOL "no redis examples" FORCE )
+SET( BUILD_TESTS OFF CACHE BOOL "no redis tests" FORCE )
 ADD_SUBDIRECTORY( "${PROJECT_SOURCE_DIR}/deps/cpp_redis" )
 INCLUDE_DIRECTORIES( ${PROJECT_SOURCE_DIR}/deps/cpp_redis/include )
 
@@ -212,6 +212,22 @@ SET( SQLITECPP_RUN_CPPCHECK OFF CACHE BOOL "no run cppcheck" FORCE )
 ADD_SUBDIRECTORY( "${PROJECT_SOURCE_DIR}/deps/sqlitecpp" )
 INCLUDE_DIRECTORIES( ${PROJECT_SOURCE_DIR}/deps/sqlitecpp )
 
+##############################################################################
+##
+## cpp-httplib
+##
+##############################################################################
+
+INCLUDE_DIRECTORIES( ${PROJECT_SOURCE_DIR}/deps/cpp-httplib )
+
+##############################################################################
+##
+## asio
+##
+##############################################################################
+
+ADD_SUBDIRECTORY( "${PROJECT_SOURCE_DIR}/deps/asio" )
+INCLUDE_DIRECTORIES( ${PROJECT_SOURCE_DIR}/deps/asio/include )
 
 ##############################################################################
 ##
