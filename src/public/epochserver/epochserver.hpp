@@ -1,30 +1,58 @@
 #ifndef __EPOCHLIB_H__
 #define __EPOCHLIB_H__
 
-#include <database/DBWorker.hpp>
 #include <vector>
+
+#include <database/DBWorker.hpp>
+#include <RCon/RCON.hpp>
+#include <SteamAPI/SteamAPI.hpp>
+#include <main.hpp>
+
+#undef GetObject
+#include <rapidjson/rapidjson.h>
+#include <rapidjson/document.h>
+#include <rapidjson/error/error.h>
+#include <rapidjson/istreamwrapper.h>
+
 
 class EpochServer {
 private:
     
-    bool initialized = false;
+    /** 
+    * steam id check cache
+    **/
+    std::mutex checkedSteamIdsMutex;
+    std::vector<uint64> checkedSteamIds;
     
-    /* 
-     * whitelists
-     */
-    std::mutex steamIdWhitelistMutex;
-    std::vector<int64> steamIdWhitelist = {};
+    std::string steamApiKey;
+    std::unique_ptr<SteamAPI> steamApi = nullptr;
+    short steamApiLogLevel = 0;
+    bool kickVacBanned = false;
+    short minDaysSinceLastVacBan = 0;
+    short maxVacBans = 1;
+    int minAccountAge = 0; // in days
 
-    /*
-     * Database Access
-     */
-    std::vector<std::pair<std::string, DBWorker> > connections = {};
+    /**
+    * BattlEye RCON
+    **/
+    std::unique_ptr<RCON> rcon = nullptr;
+    bool rconEnabled = false;
+    std::string rconIp;
+    unsigned short rconPort;
+    std::string rconPassword;
 
-    /*
-     *  Helpers
-     */
-    bool _loadConfig(const std::string& ConfigFilename);
-    std::string _getBattlEyeGUID(int64 SteamId);    
+    /**
+    * Database Access
+    **/
+    std::vector<std::pair<std::string, DBWorker> > dbWorkers;
+
+    /**
+    *  Helpers
+    **/
+    std::string __getBattlEyeGUID(uint64 steamId);    
+    void __setupBattlEye(const rapidjson::Value& config);
+    void __setupSteamApi(const rapidjson::Value& config);
+    void __setupConnection(const std::string& name, const rapidjson::Value& config);
 
 public:
     
@@ -33,77 +61,81 @@ public:
 
     int callExtensionEntrypoint(char *output, int outputSize, const char *function, const char **args, int argsCnt);
 
-    /* 
-     *  Get Config
-     */
-    std::string getConfig();
+    /** 
+    *  \brief Initial player check when joining
+    *  \param steamId 64Bit Steam community id
+    *  \return bool true if player was allowed to join, false if kicked
+    **/
+    bool initPlayerCheck(uint64 steamId);
 
-    /* 
-     *  Initial player check
-     *  64Bit Steam community id
-     */
-    std::string initPlayerCheck(int64 steamId);
+    /** 
+    *  \brief Add ban with reason to bans.txt
+    *  \param steamId 64Bit Steam community id
+    *  \param reason
+    **/
+    void addBan(uint64 steamId, const std::string& reason);
 
-    /* 
-     *  Add ban with reason to bans.txt
-     *  64Bit Steam community id
-     *  Reason
-     */
-    std::string addBan(int64 steamId, const std::string& reason);
-
-    /* 
-     *  Add whitelisted string to publicvariable.txt
-     *  String needs to be whitelisted
-     */
+    /** 
+    *  Add whitelisted string to publicvariable.txt
+    *  String needs to be whitelisted
+    **/
     std::string updatePublicVariable(const std::vector<std::string>& whitelistStrings);
-    std::string getRandomString(int stringCount);
+    
+    /**
+    *  \brief Get random string
+    **/
+    std::string getRandomString();
 
-    std::string getStringMd5(const std::vector<std::string>& stringsToHash);
+    /**
+    *  \brief Get md5 hashes of strings
+    **/
+    std::vector<std::string> getStringMd5(const std::vector<std::string>& stringsToHash);
 
-    /* 
-     *  Get current time
-     */
+    /** 
+    *  \brief Get current time as string of arma datetime array [%Y,%m,%d,%H,%M,%S]
+    **/
     std::string getCurrentTime();
-
-    /*
-     *  Server Protection
-     */
-    std::string getServerMD5();
     
     /* 
-     *  BE broadcast message 
-     *  Message
+     *  \brief BE broadcast message 
+     *  \param message
      */
-    void beBroadcastMessage (const std::string& Message);
+    void beBroadcastMessage (const std::string& message);
     
-    /* 
-     *  BE kick
-     *  PlayerUID
-     * Message
-     */
-    void beKick (const std::string& PlayerUID, const std::string& Message);
+    /** 
+    *  \brief BE kick
+    *
+    *  Kicks a player
+    *
+    *  \param playerGUID
+    **/
+    void beKick (const std::string& playerGUID);
     
-    /* 
-     *  BE ban
-     *  PlayerUID
-     *  Message
-     *  Duration (minutes)
-     */
-    void beBan(const std::string& PlayerUID, const std::string& Message, const std::string& Duration);
+    /** 
+    *  \brief BE ban
+    *  \param playerGUID
+    *  \param message
+    *  \param duration (minutes)
+    **/
+    void beBan(const std::string& playerGUID, const std::string& message, int duration);
     
-    /* 
-     *  BE shutdown 
-     */
+    /**
+    *  \brief BE shutdown 
+    **/
     void beShutdown();
     
-    /* 
-     *  BE lock / unlock
-     */
+    /** 
+    *  \brief BE lock
+    **/
     void beLock();
+    
+    /**
+    *  \brief BE unlock
+    **/
     void beUnlock();
 
 
     void log(const std::string& log);
 };
 
-#endif
+#endif //__EPOCHLIB_H__

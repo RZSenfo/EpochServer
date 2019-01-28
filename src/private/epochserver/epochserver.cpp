@@ -1,11 +1,5 @@
 #include <epochserver/epochserver.hpp>
-#include <SteamAPI/SteamAPI.hpp>
-#include <BattlEye/BEClient.hpp>
-#include <database/DBConfig.hpp>
-
-#include <yaml-cpp/yaml.h>
-#include <mariadb++/account.hpp>
-#include <mariadb++/connection.hpp>
+#include <external/md5.hpp>
 
 #include <cstdlib>
 #include <ctime>
@@ -18,282 +12,444 @@
 #include <filesystem>
 #include <random>
 
-bool __iequals(const std::string& string1, const std::string& string2) {
-    return  string1.size() == string2.size()
-        &&
-        std::equal(
-            string1.begin(),
-            string1.end(),
-            string2.begin(),
-            [](const char& c1, const char& c2) {
-        return (c1 == c2 || std::toupper(c1) == std::toupper(c2));
-    });
+
+bool __iequals(const std::string& a, const std::string& b) {
+    return std::equal(  
+        a.begin(), a.end(),
+        b.begin(), b.end(),
+        [](char a, char b) {
+            return tolower(a) == tolower(b);
+        }
+    );
 }
 
 EpochServer::EpochServer() {
     
-    this->initialized = false;
-    
-    std::vector<DBConfig> dbconfigs;
     bool error = false;
+    
+    std::filesystem::path configFilePath("@epochserver/config.json");
+    if (!std::filesystem::exists(configFilePath)) {
+        throw std::runtime_error("Configfile not found! Must be @epochserver/config.json");
+    }
+
+    std::ifstream ifs(configFilePath.string());
+    rapidjson::IStreamWrapper isw(ifs);
+    rapidjson::Document d;
+    d.ParseStream<
+        rapidjson::kParseCommentsFlag | rapidjson::kParseTrailingCommasFlag,
+        rapidjson::UTF8<char>,
+        rapidjson::IStreamWrapper
+    >(isw);
+    
+    if (d.HasParseError()) {
+        WARNING("Parsing config file failed");
+        std::exit(1);
+    }
+    
+    if (!d.HasMember("battleye") || !d["battleye"].IsObject()) {
+        WARNING("Battleye entry is not a map");
+        std::exit(1);
+    }
     try {
-
-        std::filesystem::path configFilePath("@epochserver/config.yaml");
-        if (!std::filesystem::exists(configFilePath)) {
-            configFilePath = std::filesystem::path("@epochserver/config.yml");
-        }
-        if (!std::filesystem::exists(configFilePath)) {
-            throw std::runtime_error("Configfile not found! Must be @epochserver/config.yml or @epochserver/config.yaml");
-        }
-
-        auto stringpath = configFilePath.string();
-        YAML::Node config = YAML::LoadFile(configFilePath.string());
-
-        if (!config["connections"].IsMap()) throw std::runtime_error("Connections entry is not a map");
-
-        for (auto& connectionIt : config["connections"]) {
-            auto connectionName = connectionIt.first.as<std::string>();
-            auto connectionBody = connectionIt.second;
-
-            if (!connectionBody["type"]) throw std::runtime_error("Undefined connection value: \"type\" in " + connectionName);
-            if (!connectionBody["ip"]) throw std::runtime_error("Undefined connection value: \"ip\" in " + connectionName);
-            if (!connectionBody["username"]) throw std::runtime_error("Undefined connection value: \"username\"" + connectionName);
-            if (!connectionBody["password"]) throw std::runtime_error("Undefined connection value: \"password\"" + connectionName);
-            if (!connectionBody["database"]) throw std::runtime_error("Undefined connection value: \"database\"" + connectionName);
-
-            DBConfig dbConf;
-            dbConf.connectionName = connectionName;
-            dbConf.ip = connectionBody["ip"].as<std::string>();
-            dbConf.password = connectionBody["password"].as<std::string>();
-            dbConf.user = connectionBody["username"].as<std::string>();
-            dbConf.port = connectionBody["port"].as<int>(3306);
-            dbConf.dbname = connectionBody["database"].as<std::string>();
-
-            auto type = connectionBody["type"].as<std::string>();
-            if (__iequals(type, "mysql")) {
-                dbConf.dbType = DBType::MY_SQL;
-            }
-            else if (__iequals(type, "redis")) {
-                dbConf.dbType = DBType::REDIS;
-            }
-            else if (__iequals(type, "sqlite")) {
-                dbConf.dbType = DBType::SQLITE;
-            }
-            else {
-                throw std::runtime_error("Unknown database type: \"" + type + "\" in " + connectionName);
-            }
-
-            if (connectionBody["statements"].IsMap()) {
-                for (auto& statementIt : config["connections"]) {
-                    auto statementName = statementIt.first.as<std::string>();
-                    auto statementBody = statementIt.second;
-
-                    if (!statementBody["query"]) throw std::runtime_error("Undefined statement value: \"query\" in " + connectionName + "." + statementName);
-
-                    // TODO Statements
-                }
-            }
-            dbconfigs.push_back(dbConf);
-        }
-    }
-    catch (YAML::BadConversion& x) {
-        INFO(x.msg);
-        error = true;
-    }
-    catch (YAML::ParserException& x) {
-        INFO(x.msg);
-        error = true;
+        this->__setupBattlEye(d["battleye"]);
     }
     catch (std::runtime_error& x) {
-        INFO(x.what);
-        error = true;
-    }
-    
-
-    //Try config load
-    if (!error) {
-        this->initialized = true;
-    }
-    else {
+        WARNING(x.what);
         std::exit(1);
     }
 
-    for (auto& config : dbconfigs) {
-        if (this->db->init(this->config.db)) {
-            WARNING("Database connected: " + config.connectionName);
+    if (d.HasMember("steamapi") && d["steamapi"].IsObject()) {
+        try {
+            this->__setupSteamApi(d["steamapi"]);
         }
-        else {
-            WARNING("Could not initialize Database. Check the config!");
+        catch (std::runtime_error& x) {
+            WARNING(x.what);
             std::exit(1);
         }
     }
+    
+    if (!d.HasMember("connections") || !d["connections"].IsObject()) {
+       WARNING("Connections entry is not a map");
+       std::exit(1);
+    }
+    try {
+        for (rapidjson::Value::ConstMemberIterator itr = d["connections"].MemberBegin(); itr != d["connections"].MemberEnd(); ++itr) {
+            this->__setupConnection(
+                itr->name.GetString(),
+                itr->value
+            );
+        }
+    }
+    catch (std::runtime_error& x) {
+        WARNING(x.what);
+        std::exit(1);
+    }
+    
+}
+
+void EpochServer::__setupBattlEye(const rapidjson::Value& config) {
+
+    if (!config.HasMember("enable")) throw std::runtime_error("Undefined value: \"enable\" in battleye section");
+    
+    if (!(this->rconEnabled = config["enable"].GetBool())) {
+        return;
+    }
+    
+    if (!config.HasMember("ip")) throw std::runtime_error("Undefined value: \"ip\" in battleye section");
+    if (!config.HasMember("port")) throw std::runtime_error("Undefined value: \"port\" in battleye section");
+    if (!config.HasMember("password")) throw std::runtime_error("Undefined value: \"password\" in battleye section");
+
+    this->rconIp = config["ip"].GetString();
+    this->rconPort = config["port"].GetInt();
+    this->rconPassword = config["passsword"].GetString();
+
+    this->rcon = std::make_unique<RCON>(
+        this->rconIp,
+        this->rconPort,
+        this->rconPassword,
+        true
+    );
+
+    if (!config.HasMember("autoreconnect") || config["autoreconnect"].GetBool()) {
+        this->rcon->enable_auto_reconnect();
+    }
+
+    if (config.HasMember("whitelist") && config["whitelist"].IsObject()) {
+        auto whitelistObj = config["whitelist"].GetObject();
+        if (whitelistObj.HasMember("enable") && whitelistObj["enable"].GetBool()) {
+            this->rcon->set_whitelist_enabled(true);
+                
+            if (whitelistObj.HasMember("players")) {
+                auto list = whitelistObj["players"].GetArray();
+                for (auto itr = list.begin(); itr != list.end(); ++itr) {
+                    rcon->add_to_whitelist(this->__getBattlEyeGUID(itr->GetUint64()));
+                }
+            }
+
+            if (whitelistObj.HasMember("openslots")) {
+                this->rcon->set_open_slots(whitelistObj["openslots"].GetInt());
+            }
+            else {
+                this->rcon->set_open_slots(0);
+            }
+
+            if (whitelistObj.HasMember("maxplayers")) {
+                this->rcon->set_max_players(whitelistObj["maxplayers"].GetInt());
+            }
+            else {
+                this->rcon->set_max_players(256);
+            }
+
+            if (whitelistObj.HasMember("kickmessage")) {
+                this->rcon->set_white_list_kick_message(whitelistObj["kickmessage"].GetString());
+            }
+            else {
+                this->rcon->set_white_list_kick_message("Whitelist Kick!");
+            }
+        }
+    }
+
+    if (config.HasMember("vpndetection") && config["vpndetection"].IsObject()) {
+        auto vpnObj = config["vpndetection"].GetObject();
+        if (vpnObj.HasMember("enable") && vpnObj["enable"].GetBool()) {
+            this->rcon->enable_vpn_detection();
+
+            if (vpnObj.HasMember("exceptions")) {
+                auto list = vpnObj["exceptions"].GetArray();
+                for (auto itr = list.begin(); itr != list.end(); ++itr) {
+                    rcon->add_vpn_detection_guid_exception(this->__getBattlEyeGUID(itr->GetUint64()));
+                }
+            }
+
+            if (vpnObj.HasMember("iphubapikey")) {
+                this->rcon->set_iphub_api_key(vpnObj["iphubapikey"].GetString());
+            }
+
+            if (vpnObj.HasMember("kickmessage")) {
+                this->rcon->set_vpn_detect_kick_msg(vpnObj["kickmessage"].GetString());
+            }
+            else {
+                this->rcon->set_vpn_detect_kick_msg("Whitelist Kick!");
+            }
+
+            if (vpnObj.HasMember("kicksuspecious") && vpnObj["kicksuspecious"].GetBool()) {
+                this->rcon->enable_vpn_suspecious_kicks();
+            }
+        }
+    }
+
+    if (config.HasMember("tasks") && config["tasks"].IsArray()) {
+        auto tasklist = config["tasks"].GetArray();
+        for (auto itr = tasklist.begin(); itr != tasklist.end(); ++itr) {
+
+            bool enable = (*itr)["enable"].GetBool();
+            if (!enable) continue;
+
+            std::string type = (*itr)["type"].GetString();
+            std::string data = (*itr)["data"].GetString();
+            bool repeat = (*itr)["repeat"].GetBool();
+            int seconds = (*itr)["delay"].GetInt();
+            int initdelay = (*itr)["initialdelay"].GetInt();
+
+            if (type == "GLOBALCHAT") {
+                this->rcon->add_task(RconTaskType::GLOBALMESSAGE, data, repeat, seconds, initdelay);
+            }
+            else if (type == "KICKALL") {
+                this->rcon->add_task(RconTaskType::KICKALL, data, repeat, seconds, initdelay);
+            }
+            else if (type == "SHUTDOWN") {
+                this->rcon->add_task(RconTaskType::SHUTDOWN, data, repeat, seconds, initdelay);
+            }
+            else if (type == "LOCK") {
+                this->rcon->add_task(RconTaskType::SHUTDOWN, data, repeat, seconds, initdelay);
+            }
+            else if (type == "UNLOCK") {
+                this->rcon->add_task(RconTaskType::SHUTDOWN, data, repeat, seconds, initdelay);
+            }
+        }
+    }
+
+    rcon->start();
+}
+
+void EpochServer::__setupSteamApi(const rapidjson::Value& config) {
+    if (!config.HasMember("enable")) throw std::runtime_error("Undefined value: \"enable\" in steamapi section");
+    
+    if (!config["enable"].GetBool()) {
+        return;
+    }
+    if (!config.HasMember("apikey")) throw std::runtime_error("Undefined value: \"apikey\" in steamapi section");
+    std::string apikey = config["apikey"].GetString();
+    if (apikey.empty()) {
+        throw std::runtime_error("Steam API key must be set if you want to use this feature");
+    }
+
+    this->steamApi = std::make_unique<SteamAPI>(apikey);
+
+    this->steamApiLogLevel = config.HasMember("loglevel") ? config["loglevel"].GetInt() : 0;
+    this->minDaysSinceLastVacBan = config.HasMember("mindayssincelastban") ? config["mindayssincelastban"].GetInt() : -1;
+    this->kickVacBanned = config.HasMember("kickvacbanned") ? config["kickvacbanned"].GetBool() : false;
+    this->minAccountAge = config.HasMember("minaccountage") ? config["minaccountage"].GetInt() : -1;
+}
+
+void EpochServer::__setupConnection(const std::string& name, const rapidjson::Value& config) {
+    
+    if (config.HasMember("enable") && !config["enable"].GetBool()) {
+        return;
+    }
+    
+    DBConfig dbConf;
+    
+    if (!config.HasMember("type")) throw std::runtime_error("Undefined connection value: \"type\" in " + name);
+    std::string type = config["type"].GetString();
+    if (__iequals(type, "mysql")) {
+        dbConf.dbType = DBType::MY_SQL;
+    }
+    else if (__iequals(type, "redis")) {
+        dbConf.dbType = DBType::REDIS;
+    }
+    else if (__iequals(type, "sqlite")) {
+        dbConf.dbType = DBType::SQLITE;
+    }
+    else {
+        throw std::runtime_error("Unknown database type: \"" + type + "\" in " + name);
+    }
+    
+    if (!config.HasMember("ip")) throw std::runtime_error("Undefined connection value: \"ip\" in " + name);
+    if (!config.HasMember("username")) throw std::runtime_error("Undefined connection value: \"username\" in " + name);
+    if (!config.HasMember("password")) throw std::runtime_error("Undefined connection value: \"password\" in " + name);
+    if (!config.HasMember("database")) throw std::runtime_error("Undefined connection value: \"database\" in " + name);
+
+    dbConf.connectionName = name;
+    dbConf.ip = config["ip"].GetString();
+    dbConf.password = config["password"].GetString();
+    dbConf.user = config["username"].GetString();
+    dbConf.port = config["port"].GetInt();
+    dbConf.dbname = config["database"].GetString();
+
+    if (config.HasMember("statements") && config["statements"].IsObject()) {
+        for (auto itr = config["statements"].MemberBegin(); itr != config["statements"].MemberEnd(); ++itr) {
+            std::string statementName = itr->name.GetString();
+            auto statementBody = itr->value.GetObject();
+
+            if (!statementBody.HasMember("query")) throw std::runtime_error("Undefined statement value: \"query\" in " + name + "." + statementName);
+            if (!statementBody.HasMember("params")) throw std::runtime_error("Undefined statement value: \"params\" in " + name + "." + statementName);
+            if (!statementBody.HasMember("result")) throw std::runtime_error("Undefined statement value: \"result\" in " + name + "." + statementName);
+
+            DBSQLStatementTemplate statement;
+            statement.statementName = statementName;
+            statement.query = statementBody["query"].GetString();
+            statement.isInsert = statementBody.HasMember("isinsert") && statementBody["isinsert"].GetBool();
+
+            auto paramslist = statementBody["params"].GetArray();
+            statement.params.reserve(paramslist.Size());
+            for (auto itr = paramslist.begin(); itr != paramslist.end(); ++itr) {
+                auto typeStr = itr->GetString();
+                if (typeStr == "number") {
+                    statement.params.emplace_back(DBSQLStatementParamType::NUMBER);
+                }
+                else if (typeStr == "array") {
+                    statement.params.emplace_back(DBSQLStatementParamType::ARRAY);
+                }
+                else if (typeStr == "bool") {
+                    statement.params.emplace_back(DBSQLStatementParamType::BOOL);
+                }
+                else if (typeStr == "string") {
+                    statement.params.emplace_back(DBSQLStatementParamType::STRING);
+                }
+                else {
+                    throw std::runtime_error("Unknown type in params types of " + statementName);
+                }
+            }
+
+            auto resultslist = statementBody["results"].GetArray();
+            statement.result.reserve(resultslist.Size());
+            for (auto itr = resultslist.begin(); itr != resultslist.end(); ++itr) {
+                auto typeStr = itr->GetString();
+                if (typeStr == "number") {
+                    statement.result.emplace_back(DBSQLStatementParamType::NUMBER);
+                }
+                else if (typeStr == "array") {
+                    statement.result.emplace_back(DBSQLStatementParamType::ARRAY);
+                }
+                else if (typeStr == "bool") {
+                    statement.result.emplace_back(DBSQLStatementParamType::BOOL);
+                }
+                else if (typeStr == "string") {
+                    statement.result.emplace_back(DBSQLStatementParamType::STRING);
+                }
+                else {
+                    throw std::runtime_error("Unknown type in result types of " + statementName);
+                }
+            }
+
+            dbConf.statements.emplace_back(statement);
+        }
+    }
+    
 }
 
 EpochServer::~EpochServer() {
     
 }
 
-bool EpochServer::callExtensionEntrypoint(char *output, int outputSize, const char *function, const char **args, int argsCnt) {
-
+int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const char *function, const char **args, int argsCnt) {
     
-    hiveOutput = "0.6.0.0";
-    return false;
+    // TODO
+    strncpy_s(output, outputSize, "0.1.0.0", _TRUNCATE);
+    return 0;
 }
 
-std::string EpochServer::getConfig() {
-    SQF returnSqf;
+bool EpochServer::initPlayerCheck(uint64 _steamId) {
 
-    returnSqf.push_str(this->config.instanceId.c_str());
-    returnSqf.push_number(this->config.steamAPI.key.empty() ? 0 : 1);
+    // already looked up
+    if (std::find(this->checkedSteamIds.begin(), this->checkedSteamIds.end(), _steamId) != this->checkedSteamIds.end()) {
+        return true;
+    }
+    bool kick = false;
+    auto steamIdStr = std::to_string(_steamId);
 
-    return returnSqf.toArray();
-}
+    // SteamAPI is set up
+    if (this->steamApi) {
+        
+        auto bans = this->steamApi->GetPlayerBans(steamIdStr);
 
-std::string EpochServer::initPlayerCheck(int64 _steamId) {
-    bool proceeded = false;
-
-    // Not in whitelist
-    if (std::find(this->steamIdWhitelist.begin(), this->steamIdWhitelist.end(), _steamId) == this->steamIdWhitelist.end()) {
-
-        // SteamAPI key is not empty
-        if (!this->config.steamAPI.key.empty()) {
-            SteamAPI steamAPI(this->config.steamAPI.key);
-
-            rapidjson::Document document;
-            std::stringstream steamIds;
-            steamIds << _steamId;
-
-            // VAC check
-            if (!proceeded && steamAPI.GetPlayerBans(steamIds.str(), &document)) {
-                if (this->config.steamAPI.logging >= 2) {
-                    std::stringstream log;
-                    log << "[SteamAPI] VAC check " << _steamId << std::endl;
-                    log << "- VACBanned: " << (document["players"][0]["VACBanned"].GetBool() ? "true" : "false") << std::endl;
-                    log << "- DaysSinceLastBan: " << document["players"][0]["DaysSinceLastBan"].GetInt() << std::endl;
-                    log << "- NumberOfVACBans: " << document["players"][0]["NumberOfVACBans"].GetInt();
-                    INFO(log.str());
-                }
-
-                if (!proceeded && this->config.steamAPI.vacBanned && document["players"][0]["VACBanned"].GetBool()) {
-                    if (this->config.steamAPI.logging >= 1) {
-                        std::stringstream log;
-                        log << "[SteamAPI] VAC ban " << _steamId << std::endl;
-                        log << "- VACBanned: " << (document["players"][0]["VACBanned"].GetBool() ? "true" : "false");
-                        INFO(log.str());
-                    }
-
-                    this->addBan(_steamId, "VAC Ban");
-                    proceeded = true;
-                }
-                if (!proceeded && this->config.steamAPI.vacMaxDaysSinceLastBan > 0 && document["players"][0]["DaysSinceLastBan"].GetInt() < this->config.steamAPI.vacMaxDaysSinceLastBan) {
-                    if (this->config.steamAPI.logging >= 1) {
-                        std::stringstream log;
-                        log << "[SteamAPI] VAC ban " << _steamId << std::endl;
-                        log << "- DaysSinceLastBan: " << document["players"][0]["DaysSinceLastBan"].GetInt();
-                        INFO(log.str());
-                    }
-
-                    this->addBan(_steamId, "VAC Ban");
-                    proceeded = true;
-                }
-                if (!proceeded && this->config.steamAPI.vacMinNumberOfBans > 0 && document["players"][0]["NumberOfVACBans"].GetInt() >= this->config.steamAPI.vacMinNumberOfBans) {
-                    if (this->config.steamAPI.logging >= 1) {
-                        std::stringstream log;
-                        log << "[SteamAPI] VAC ban " << _steamId << std::endl;
-                        log << "- NumberOfVACBans: " << document["players"][0]["NumberOfVACBans"].GetInt();
-                        INFO(log.str());
-                    }
-
-                    this->addBan(_steamId, "VAC Ban");
-                    proceeded = true;
-                }
+        // VAC check
+        if (bans.NumberOfGameBans > 0) {
+            if (this->steamApiLogLevel >= 2) {
+                std::stringstream log;
+                log << "[SteamAPI] VAC check " << _steamId << std::endl;
+                log << "- VACBanned: " << (bans.VACBanned ? "true" : "false") << std::endl;
+                log << "- NumberOfVACBans: " << bans.NumberOfGameBans;
+                INFO(log.str());
             }
 
-            // Player check
-            if (!proceeded && steamAPI.GetPlayerSummaries(steamIds.str(), &document)) {
-                if (this->config.steamAPI.logging >= 2) {
+            if (!kick && this->kickVacBanned && bans.VACBanned) {
+                if (this->steamApiLogLevel >= 1) {
                     std::stringstream log;
-                    log << "[SteamAPI] Player check " << _steamId << std::endl;
-                    log << "- timecreated: " << document["response"]["players"][0]["timecreated"].GetInt();
+                    log << "[SteamAPI] VAC ban " << _steamId << std::endl;
+                    log << "- VACBanned: " << (bans.VACBanned ? "true" : "false");
                     INFO(log.str());
                 }
 
-                if (!proceeded && this->config.steamAPI.playerAllowOlderThan > 0) {
-                    std::time_t currentTime = std::time(nullptr);
+                this->addBan(_steamId, "VAC Ban");
+                kick = true;
+            }
+            if (!kick && this->minDaysSinceLastVacBan > 0 && bans.DaysSinceLastBan < this->minDaysSinceLastVacBan) {
+                if (this->steamApiLogLevel >= 1) {
+                    std::stringstream log;
+                    log << "[SteamAPI] VAC ban " << _steamId << std::endl;
+                    log << "- DaysSinceLastBan: " << bans.DaysSinceLastBan;
+                    INFO(log.str());
+                }
 
-                    if ((currentTime - document["response"]["players"][0]["timecreated"].GetInt()) < this->config.steamAPI.playerAllowOlderThan) {
-                        if (this->config.steamAPI.logging >= 1) {
-                            std::stringstream log;
-                            log << "[SteamAPI] Player ban " << _steamId << std::endl;
-                            log << "- timecreated: " << document["response"]["players"][0]["timecreated"].GetInt() << std::endl;
-                            log << "- current: " << currentTime;
-                            INFO(log.str());
-                        }
+                this->addBan(_steamId, "VAC Ban");
+                kick = true;
+            }
+            if (!kick && this->maxVacBans > 0 && bans.NumberOfGameBans >= this->maxVacBans) {
+                if (this->steamApiLogLevel >= 1) {
+                    std::stringstream log;
+                    log << "[SteamAPI] VAC ban " << _steamId << std::endl;
+                    log << "- NumberOfVACBans: " << bans.NumberOfGameBans;
+                    INFO(log.str());
+                }
 
-                        this->addBan(_steamId, "New account filter");
-                        proceeded = true;
+                this->addBan(_steamId, "VAC Ban");
+                kick = true;
+            }
+        }
+
+        // Player check
+        auto summary = this->steamApi->GetPlayerSummaries(steamIdStr);
+        if (!kick) {
+            if (this->steamApiLogLevel >= 2) {
+                std::stringstream log;
+                log << "[SteamAPI] Player check " << _steamId << std::endl;
+                log << "- timecreated: " << summary.timecreated;
+                INFO(log.str());
+            }
+
+            if (!kick && this->minAccountAge > 0 && summary.timecreated > -1) {
+                std::time_t currentTime = std::time(0);
+                int age = currentTime - summary.timecreated;
+                age /= (24 * 60 * 60);
+
+                if (age > 0 && age < this->minAccountAge) {
+                    if (this->steamApiLogLevel >= 1) {
+                        std::stringstream log;
+                        log << "[SteamAPI] Player ban " << _steamId << std::endl;
+                        log << "- timecreated: " << summary.timecreated << std::endl;
+                        log << "- current: " << currentTime;
+                        INFO(log.str());
                     }
+
+                    this->addBan(_steamId, "New account filter");
+                    kick = true;
                 }
             }
         }
 
-        // Not proceeded -> fine
-        if (!proceeded) {
-            this->steamIdWhitelistMutex.lock();
-            this->steamIdWhitelist.push_back(_steamId);
-            this->steamIdWhitelistMutex.unlock();
+        // Not kick -> fine
+        if (!kick) {
+            this->checkedSteamIdsMutex.lock();
+            this->checkedSteamIds.push_back(_steamId);
+            this->checkedSteamIdsMutex.unlock();
+        }
+        else {
+            this->beKick(steamIdStr);
         }
     }
 
-    return "";
+    return !kick;
 }
 
-std::string EpochServer::addBan(int64 _steamId, const std::string& _reason) {
-    std::string battleyeGUID = this->_getBattlEyeGUID(_steamId);
-    std::string bansFilename = this->config.battlEyePath + "/bans.txt";
-    SQF returnSQF;
-
-    std::ofstream bansFile(bansFilename, std::ios::app);
-    if (bansFile.good()) {
-        bansFile << battleyeGUID << " -1 " << _reason << std::endl;
-        bansFile.close();
-
-                INFO("BEClient: try to connect " + this->config.battlEye.ip);
-                BEClient bec     (this->config.battlEye.ip.c_str(), this->config.battlEye.port);
-                bec.sendLogin    (this->config.battlEye.password.c_str());
-                bec.readResponse (BE_LOGIN);
-                if (bec.isLoggedIn()) {
-                    INFO("BEClient: logged in!");
-                    bec.sendCommand  ("loadBans");
-                    bec.readResponse (BE_COMMAND);
-                
-                    bec.sendCommand  ("players");
-                    bec.readResponse (BE_COMMAND);
-                        
-                    int playerSlot = bec.getPlayerSlot (battleyeGUID);
-                    if (playerSlot >= 0) {
-                        std::stringstream ss;
-                        ss << "ban " << playerSlot << " 0 " << _reason;
-                        bec.sendCommand  (ss.str().c_str());
-                        bec.readResponse (BE_COMMAND);
-                    }
-                } else {
-                    INFO("BEClient: login failed!");
-                }
-                bec.disconnect();
-
-        returnSQF.push_str("1");
-        returnSQF.push_str(battleyeGUID.c_str());
-    }
-    else {
-        bansFile.close();
-        returnSQF.push_str("0");
-    }
-
-    return returnSQF.toArray();
+void EpochServer::addBan(uint64 _steamId, const std::string& _reason) {
+    std::string battleyeGUID = this->__getBattlEyeGUID(_steamId);
+    this->rcon->add_ban(battleyeGUID, _reason);
 }
 
 std::string EpochServer::updatePublicVariable(const std::vector<std::string>& _whitelistStrings) {
+    /* TODO
     std::string pvFilename = this->config.battlEyePath + "/publicvariable.txt";
     std::string pvContent = "";
     bool pvFileOriginalFound = false;
@@ -378,111 +534,52 @@ std::string EpochServer::updatePublicVariable(const std::vector<std::string>& _w
         INFO("BEClient: login failed!");
     }
     bec.disconnect();
+    */
 
-    return returnSQF.toArray();
+    return "";
 }
-std::string EpochServer::getRandomString(int _stringCount) {
-    SQF returnSQF;
-    std::vector<std::string> randomStrings;
 
+std::string EpochServer::getRandomString() {
+    
     // Define char pool
     const char charPool[] = "abcdefghijklmnopqrstuvwxyz";
     int charPoolSize = sizeof(charPool) - 1;
 
-    for (int stringCounter = 0; stringCounter < _stringCount; stringCounter++) {
-        std::string randomString;
-        int stringLength = (std::rand() % 5) + 5; //random string size between 5-10
+    std::string randomString;
+    int stringLength = (std::rand() % 5) + 5; //random string size between 5-10
 
-        for (int i = 0; i < stringLength; i++) {
-            randomString += charPool[std::rand() % charPoolSize];
-        }
-
-        // Build unique string array
-        if (std::find(randomStrings.begin(), randomStrings.end(), randomString) == randomStrings.end() && randomString.find("god") == std::string::npos) {
-            randomStrings.push_back(randomString);
-        }
-        else {
-            stringCounter--;
-        }
+    for (int i = 0; i < stringLength; i++) {
+        randomString += charPool[std::rand() % charPoolSize];
     }
 
-    if (_stringCount == 1 && randomStrings.size() == 1) {
-        return randomStrings.at(0);
-    }
-    else {
-        for (std::vector<std::string>::iterator it = randomStrings.begin(); it != randomStrings.end(); ++it) {
-            returnSQF.push_str(it->c_str());
-        }
-
-        return returnSQF.toArray();
-    }
+    return randomString;
 }
 
-std::string EpochServer::getStringMd5(const std::vector<std::string>& _stringsToHash) {
-    SQF returnSQF;
+std::vector<std::string> EpochServer::getStringMd5(const std::vector<std::string>& _stringsToHash) {
     
+    std::vector<std::string> out;
+    out.reserve(_stringsToHash.size());
+
     for (auto it = _stringsToHash.begin(); it != _stringsToHash.end(); ++it) {
         MD5 md5 = MD5(*it);
-        returnSQF.push_str(md5.hexdigest().c_str());
+        out.emplace_back(md5.hexdigest());
     }
 
-    return returnSQF.toArray();
+    return out;
 }
 
 std::string EpochServer::getCurrentTime() {
-    SQF returnSQF;
-    char buffer[8];
-    size_t bufferSize;
-
-    time_t t = time(0);
-    struct tm * currentTime = localtime(&t);
-
-    bufferSize = strftime(buffer, 8, "%Y", currentTime);
-    returnSQF.push_number(buffer, bufferSize);
-
-    bufferSize = strftime(buffer, 8, "%m", currentTime);
-    returnSQF.push_number(buffer, bufferSize);
-
-    bufferSize = strftime(buffer, 8, "%d", currentTime);
-    returnSQF.push_number(buffer, bufferSize);
-
-    bufferSize = strftime(buffer, 8, "%H", currentTime);
-    returnSQF.push_number(buffer, bufferSize);
-
-    bufferSize = strftime(buffer, 8, "%M", currentTime);
-    returnSQF.push_number(buffer, bufferSize);
-
-    bufferSize = strftime(buffer, 8, "%S", currentTime);
-    returnSQF.push_number(buffer, bufferSize);
-
-    return returnSQF.toArray();
-}
-
-std::string EpochServer::getServerMD5() {
-
-    std::string serverMD5;
-    std::string addonPath = this->config.hivePath + "/addons/a3_epoch_server.pbo";
-    FILE *srvFile = fopen(addonPath.c_str(), "rb");
-    if (srvFile != NULL) {
-        MD5 md5Context;
-        int bytes;
-        unsigned char data[1024];
-
-        while ((bytes = fread(data, 1, 1024, srvFile)) != 0) {
-            md5Context.update(data, bytes);
-        }
-
-        md5Context.finalize();
-        serverMD5 = md5Context.hexdigest();
-    }
-    else {
-        serverMD5 = addonPath;
-    }
     
-    return serverMD5;
+    time_t     now = time(0);
+    struct tm  tstruct;
+    char       buf[80];
+    tstruct = *localtime(&now);
+    strftime(buf, sizeof(buf), "[%Y,%m,%d,%H,%M,%S]", &tstruct);
+
+    return buf;
 }
 
-std::string EpochServer::_getBattlEyeGUID(int64 _steamId) {
+std::string EpochServer::__getBattlEyeGUID(uint64 _steamId) {
     uint8 i = 0;
     uint8 parts[8] = { 0 };
 
@@ -497,182 +594,51 @@ std::string EpochServer::_getBattlEyeGUID(int64 _steamId) {
         bestring << char(parts[i]);
     }
 
-    MD5 md5 = MD5(bestring.str());
-
-    return md5.hexdigest();
-}
-
-bool EpochServer::_loadConfig(const std::string& configFilename) {
-    
-    if (this->_fileExist(configFilename)) {
-        
-        ConfigFile configFile(configFilename);
-
-        // EpochServer config
-        this->config.battlEyePath   = (std::string)configFile.Value("EpochServer", "BattlEyePath", (this->config.profilePath.length() > 0 ? this->config.profilePath + "/battleye" : ""));
-        this->config.instanceId     = (std::string)configFile.Value("EpochServer", "InstanceID", "NA123");
-        this->config.logAbuse       = (unsigned short int)configFile.Value("EpochServer", "LogAbuse", 0);
-        this->config.logLimit       = (unsigned short int)configFile.Value("EpochServer", "LogLimit", 999);
-        
-        this->config.battlEye.ip    = (std::string)configFile.Value("EpochServer", "IP", "127.0.0.1");
-        this->config.battlEye.port  = (unsigned short int)configFile.Value("EpochServer", "Port", 2306);
-        this->config.battlEye.password = (std::string)configFile.Value("EpochServer", "Password", "");
-        this->config.battlEye.path  = this->config.battlEyePath;
-
-        //DB Config
-        auto dbType = this->config.db.dbType   = (std::string)configFile.Value("Database", "Type", "Redis");
-
-        this->config.db.ip       = (std::string)configFile.Value(dbType, "IP", "127.0.0.1");
-        this->config.db.port     = (unsigned short int)configFile.Value(dbType, "Port", dbType == "Redis" ? 6379 : 3306);
-        this->config.db.user     = (std::string)configFile.Value(dbType, "User", dbType == "Redis" ? "" : "root");
-        this->config.db.password = (std::string)configFile.Value(dbType, "Password", "");
-        this->config.db.dbIndex  = (std::string)configFile.Value(dbType, "DB", dbType == "Redis" ? "0" : "epoch");
-        this->config.db.logger   = this->logger;
-
-        // SteamApi
-        this->config.steamAPI.logging                = configFile.Value("SteamAPI", "Logging", 0);
-        this->config.steamAPI.key                    = (std::string)configFile.Value("SteamAPI", "Key", "");
-        this->config.steamAPI.vacBanned              = configFile.Value("SteamAPI", "VACBanned", 0) > 0;
-        this->config.steamAPI.vacMinNumberOfBans     = configFile.Value("SteamAPI", "VACMinimumNumberOfBans", 0);
-        this->config.steamAPI.vacMaxDaysSinceLastBan = configFile.Value("SteamAPI", "VACMaximumDaysSinceLastBan", 0);
-        this->config.steamAPI.playerAllowOlderThan   = configFile.Value("SteamAPI", "PlayerAllowOlderThan", 0);
-
-        return true;
-    }
-    else {
-        return false;
-    }
-}
-
-bool EpochServer::_isOffialServer() {
-    return this->getServerMD5() == EpochServer_SERVERMD5 ? true : false;
+    return MD5(bestring.str()).hexdigest();
 }
 
 // Battleye Integration
 
-void EpochServer::beBroadcastMessage (const std::string& msg) {
-    if (msg.empty()) 
+void EpochServer::beBroadcastMessage(const std::string& msg) {
+    if (msg.empty() || !this->rcon) {
         return;
-
-    INFO("BEClient: try to connect " + this->config.battlEye.ip);
-    BEClient bec     (this->config.battlEye.ip.c_str(), this->config.battlEye.port);    
-    bec.sendLogin    (this->config.battlEye.password.c_str());
-    bec.readResponse (BE_LOGIN);
-    if (bec.isLoggedIn()) {
-        INFO("BEClient: logged in!");
-        std::stringstream ss;
-        ss << "say -1 " << msg;
-        bec.sendCommand  (ss.str().c_str());
-        bec.readResponse (BE_COMMAND);
-    } else {
-        INFO("BEClient: login failed!");
     }
-    bec.disconnect();
+    this->rcon->send_global_msg(msg);
 }
 
-void EpochServer::beKick (const std::string& playerUID, const std::string& msg) {
-    if (playerUID.empty() || msg.empty()) 
+void EpochServer::beKick(const std::string& playerGUID) {
+    if (playerGUID.empty() || !this->rcon) {
         return;
-    
-    INFO("BEClient: try to connect " + this->config.battlEye.ip);
-    BEClient bec     (this->config.battlEye.ip.c_str(), this->config.battlEye.port);
-    bec.sendLogin    (this->config.battlEye.password.c_str());
-    bec.readResponse (BE_LOGIN);
-    if (bec.isLoggedIn()) {
-        INFO("BEClient: logged in!");
-        bec.sendCommand  ("players");
-        bec.readResponse (BE_COMMAND);
-        
-        std::string playerGUID = this->_getBattlEyeGUID (atoll(playerUID.c_str()));
-        int playerSlot         = bec.getPlayerSlot (playerGUID);
-        if (playerSlot < 0) {
-            bec.disconnect();
-            return;
-        }
-    
-        std::stringstream ss;
-        ss << "kick " << playerSlot << ' ' << msg;
-        bec.sendCommand  (ss.str().c_str());
-        bec.readResponse (BE_COMMAND);
-        } else {
-            INFO("BEClient: login failed!");
-        }
-    bec.disconnect();
+    }
+    this->rcon->kick(playerGUID);
 }
 
-void EpochServer::beBan(const std::string& playerUID, const std::string& msg, const std::string& duration) {
-    if (playerUID.empty() || msg.empty())
+void EpochServer::beBan(const std::string& playerUID, const std::string& msg, int duration) {
+    if (playerUID.empty() || msg.empty() || !this->rcon) {
         return;
-            
-    INFO("BEClient: try to connect " + this->config.battlEye.ip);
-    BEClient bec     (this->config.battlEye.ip.c_str(), this->config.battlEye.port);
-    bec.sendLogin    (this->config.battlEye.password.c_str());
-    bec.readResponse (BE_LOGIN);
-    if (bec.isLoggedIn()) {
-        INFO("BEClient: logged in!");
-        bec.sendCommand  ("players");
-        bec.readResponse (BE_COMMAND);
-
-        std::string playerGUID = this->_getBattlEyeGUID (atoll(playerUID.c_str()));
-        int playerSlot         = bec.getPlayerSlot (playerGUID);
-        if (playerSlot < 0) {
-            bec.disconnect();
-            return;
-        }
-        
-        std::stringstream ss;
-        ss << "ban " << playerSlot << ' ' << (duration.empty() ? "-1" : duration) << ' ' << msg;
-        bec.sendCommand  (ss.str().c_str());
-        bec.readResponse (BE_COMMAND);
-    } else {
-        INFO("BEClient: login failed!");
     }
-    bec.disconnect   ();
+     
+    this->rcon->add_ban(playerUID, msg, duration);
 }
 
 void EpochServer::beShutdown() {
-    INFO("BEClient: try to connect " + this->config.battlEye.ip);
-    BEClient bec     (this->config.battlEye.ip.c_str(), this->config.battlEye.port);
-    bec.sendLogin    (this->config.battlEye.password.c_str());
-    bec.readResponse (BE_LOGIN);
-    if (bec.isLoggedIn()) {
-        INFO("BEClient: logged in!");
-        bec.sendCommand  ("#shutdown");
-        bec.readResponse (BE_COMMAND);
-    } else {
-        INFO("BEClient: login failed!");
-    }    
-    bec.disconnect   ();
+    
+    // TODO maybe differently?
+    std::exit(0);
 }
 
 void EpochServer::beLock() {
-    INFO("BEClient: try to connect " + this->config.battlEye.ip);
-    BEClient bec(this->config.battlEye.ip.c_str(), this->config.battlEye.port);
-    bec.sendLogin(this->config.battlEye.password.c_str());
-    bec.readResponse(BE_LOGIN);
-    if (bec.isLoggedIn()) {
-        INFO("BEClient: logged in!");
-        bec.sendCommand("#lock");
-        bec.readResponse(BE_COMMAND);
-    } else {
-        INFO("BEClient: login failed!");
+    if (!this->rcon) {
+        return;
     }
-    bec.disconnect();
+    this->rcon->send_command("#lock");
 }
 
 void EpochServer::beUnlock() {
-    INFO("BEClient: try to connect " + this->config.battlEye.ip);
-    BEClient bec(this->config.battlEye.ip.c_str(), this->config.battlEye.port);
-    bec.sendLogin(this->config.battlEye.password.c_str());
-    bec.readResponse(BE_LOGIN);
-    if (bec.isLoggedIn()) {
-        INFO("BEClient: logged in!");
-        bec.sendCommand("#unlock");
-        bec.readResponse(BE_COMMAND);
-    } else {
-        INFO("BEClient: login failed!");
+    if (!this->rcon) {
+        return;
     }
-    bec.disconnect();
+    this->rcon->send_command("#unlock");
 }
 
 void EpochServer::log(const std::string& log) {
