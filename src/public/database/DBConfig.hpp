@@ -11,11 +11,19 @@ enum DBType {
     SQLITE
 };
 
-class DBSQLStatementTemplates {
-public:
+enum DBSQLStatementParamType {
+    NUMBER,
+    BOOL,
+    STRING,
+    ARRAY
+};
+
+struct DBSQLStatementTemplate {
     std::string statementName;
     std::string query;
-    unsigned short queryParamsCnt;
+    std::vector<DBSQLStatementParamType> params;
+    std::vector<DBSQLStatementParamType> result;
+    bool isInsert;
 };
 
 struct DBConfig {
@@ -27,7 +35,7 @@ struct DBConfig {
     std::string user;
     std::string password;
 
-    std::vector<DBSQLStatementTemplates> statements;
+    std::vector<DBSQLStatementTemplate> statements;
 };
 
 #endif
