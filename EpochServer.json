@@ -1,0 +1,108 @@
+{
+	"connections": {
+		"test1": {
+			"enable": false,
+			"type": "mysql", // either "mysql", "redis" or "sqlite"
+			"ip": "127.0.0.1",
+			"port": 3306,
+			"dbname": "",
+			"username": "",
+			"password": "",
+			"statements": {
+				"insertPlayer": {
+					"query": "INSERT INTO players VALUES (?,?,?,?)",
+					"params": [ "number", "string", "bool", "array" ],
+					"result": [ "number" ],
+					"isinsert": true // will return insertId
+				},
+				"getPlayer": {
+					"query": "SELECT * FROM players WHERE id = '?'",
+					"params": [ "number" ],
+					"result": [ "number", "string", "bool", "array" ],
+					"isinsert": false // will return insertId
+				}
+			}
+		}
+	},
+	"battleye": {
+		"enable": false,
+		"ip": "127.0.0.1",
+		"port": 2303,
+		"password": "changeme",		
+		"autoreconnect": true,
+		"whitelist": {
+			"enable": false,
+			"kickmessage": "Whitelist Kick!",
+			"openslots": 0,
+			"maxplayers": 100,
+			"players": [
+				76561198147125546 // steam64Ids
+			]
+		},
+		"vpndetection": {
+			"enable": false,
+			"iphubapikey": "",
+			"kicksuspecious": false,
+			"kickmessage": "VPN detected!",
+			"exceptions": [
+				76561198147125546
+			]
+		},
+		"tasks": [
+			{
+				"enable": true,
+				"name": "whatever test 1",
+				"type": "GLOBALMESSAGE",
+				"data": "your message",
+				"initialdelay": 30,
+				"repeat": false,
+				"delay": 30
+			},
+			{
+				"enable": true,
+				"name": "whatever test 2",
+				"type": "KICKALL",
+				"data": "your kick message",
+				"initialdelay": 30,
+				"repeat": false,
+				"delay": 30
+			},
+			{
+				"enable": true,
+				"name": "whatever test 3",
+				"type": "SHUTDOWN",
+				"data": "",
+				"initialdelay": 30,
+				"repeat": false,
+				"delay": 30
+			},
+			{
+				"enable": true,
+				"name": "whatever test 4",
+				"type": "LOCK",
+				"data": "",
+				"initialdelay": 30,
+				"repeat": false,
+				"delay": 30
+			},
+			{
+				"enable": true,
+				"name": "whatever test 5",
+				"type": "UNLOCK",
+				"data": "",
+				"initialdelay": 30,
+				"repeat": false,
+				"delay": 30
+			}
+		]
+	},
+	"steamapi": {
+		"enable": true,
+		"apikey": "", // steam api key
+		"loglevel": 0,
+		"kickvacbanned": true, // kick for vacbans (also max vacbans)
+		"maxvacbans": 1,
+		"mindayssincelastban": 365,
+		"minaccountage": -1 // in days
+	}
+}
