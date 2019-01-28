@@ -15,7 +15,7 @@ namespace logging {
 }
 
 // GENERAL PURPOSE TYPE DEFS
-typedef long long int int64;
+typedef unsigned long long uint64;
 typedef unsigned char uint8;
 
 // THREADPOOL
@@ -107,8 +107,9 @@ namespace utils {
             }
             _cur_pos++;
         }
-        if (!next.empty())
+        if (!next.empty()) {
             elems.push_back(next);
+        }
         return elems;
 
     }
