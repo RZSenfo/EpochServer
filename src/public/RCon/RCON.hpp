@@ -76,7 +76,7 @@ public:
 
     std::vector<RconPlayerInfo> get_players();
 
-    void add_task(const RconTaskType& _type, const std::string& _data, bool _repeat, int _seconds_until);
+    void add_task(const RconTaskType& _type, const std::string& _data, bool _repeat, int _delay, int _initdelay = 0);
 
     void kick_all();
     void enable_auto_reconnect();
@@ -100,7 +100,7 @@ private:
         message_type type;
     };
     
-    UDP_Socket * socket;
+    std::shared_ptr<UDP_Socket> socket;
 	
 	unsigned int port;
 	std::string host;
@@ -208,12 +208,12 @@ private:
         bool repeat;
         int seconds;
         std::chrono::time_point<std::chrono::system_clock> exec_at;
-        Task * next_task = nullptr;
+        std::shared_ptr<Task> next_task = nullptr;
     };
-    Task * task_head = nullptr;
+    std::shared_ptr<Task> task_head = nullptr;
     std::mutex task_mutex;
 
-    void insert_task(Task * _new_task);
+    void insert_task(std::shared_ptr<Task> _new_task);
 };
 
 #endif // RCON_HPP

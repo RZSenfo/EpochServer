@@ -31,7 +31,7 @@ RCON::RCON(const std::string& _ip, int _port, const std::string& _pw, bool _dela
 
 void RCON::start() {
     
-    this->socket = new UDP_Socket(host, port, [this]() {
+    this->socket = std::make_shared<UDP_Socket>(host, port, [this]() {
         this->handle_disconnect();
     });
 
@@ -151,9 +151,6 @@ void RCON::start() {
                                 _cur->exec_at = std::chrono::system_clock::now() + std::chrono::seconds(_cur->seconds);
                                 this->insert_task(_cur);
                             }
-                            else {
-                                delete _cur;
-                            }
                         }
                     }
                 }
@@ -238,9 +235,6 @@ RCON::~RCON(void) {
     if (this->worker.joinable()) {
         this->worker.join();
     }
-
-    delete this->socket;
-
 }
 
 void RCON::connect() {
@@ -979,9 +973,9 @@ std::optional<RCON::IPInfo> RCON::check_ip_cache(const std::string& _ip) {
 }
 
 
-void RCON::add_task(const RconTaskType& _type, const std::string& _data, bool _repeat, int _seconds) {
+void RCON::add_task(const RconTaskType& _type, const std::string& _data, bool _repeat, int _seconds, int _initdelay) {
 
-    auto _new_task = new Task();
+    auto _new_task = std::make_shared<Task>();
     _new_task->data = _data;
     _new_task->type = _type;
     _new_task->repeat = _repeat;
@@ -991,15 +985,15 @@ void RCON::add_task(const RconTaskType& _type, const std::string& _data, bool _r
     this->insert_task(_new_task);
 }
 
-void RCON::insert_task(Task * _new_task) {
+void RCON::insert_task(std::shared_ptr<Task> _new_task) {
 
     {
         std::lock_guard<std::mutex> lock(this->task_mutex);
 
-        Task * _cur = this->task_head;
-        Task * _before = nullptr;
+        auto _cur = this->task_head;
+        std::shared_ptr<Task> _before = nullptr;
 
-        while (_cur != nullptr) {
+        while (_cur) {
             if (_cur->exec_at >= _new_task->exec_at) {
                 _before->next_task = _new_task;
                 _new_task->next_task = _cur;
@@ -1009,8 +1003,8 @@ void RCON::insert_task(Task * _new_task) {
             _cur = _cur->next_task;
         }
 
-        if (_cur == nullptr) {
-            if (_before != nullptr) {
+        if (!_cur) {
+            if (_before) {
                 _before->next_task = _new_task;
             }
             else {
