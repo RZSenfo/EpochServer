@@ -12,17 +12,6 @@
 #include <filesystem>
 #include <random>
 
-
-bool __iequals(const std::string& a, const std::string& b) {
-    return std::equal(  
-        a.begin(), a.end(),
-        b.begin(), b.end(),
-        [](char a, char b) {
-            return tolower(a) == tolower(b);
-        }
-    );
-}
-
 EpochServer::EpochServer() {
     
     bool error = false;
@@ -242,13 +231,13 @@ void EpochServer::__setupConnection(const std::string& name, const rapidjson::Va
     
     if (!config.HasMember("type")) throw std::runtime_error("Undefined connection value: \"type\" in " + name);
     std::string type = config["type"].GetString();
-    if (__iequals(type, "mysql")) {
+    if (utils::iequals(type, "mysql")) {
         dbConf.dbType = DBType::MY_SQL;
     }
-    else if (__iequals(type, "redis")) {
+    else if (utils::iequals(type, "redis")) {
         dbConf.dbType = DBType::REDIS;
     }
-    else if (__iequals(type, "sqlite")) {
+    else if (utils::iequals(type, "sqlite")) {
         dbConf.dbType = DBType::SQLITE;
     }
     else {
@@ -333,21 +322,17 @@ EpochServer::~EpochServer() {
     
 }
 
-int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const char *function, const char **args, int argsCnt) {
-    
-    // TODO
-    strncpy_s(output, outputSize, "0.1.0.0", _TRUNCATE);
-    return 0;
-}
+bool EpochServer::initPlayerCheck(const std::string& steamIdStr) {
 
-bool EpochServer::initPlayerCheck(uint64 _steamId) {
-
-    // already looked up
-    if (std::find(this->checkedSteamIds.begin(), this->checkedSteamIds.end(), _steamId) != this->checkedSteamIds.end()) {
-        return true;
+    auto _steamId = std::stoull(steamIdStr);
+    {
+        std::shared_lock<std::mutex> lock(this->checkedSteamIdsMutex);
+        // already looked up
+        if (std::find(this->checkedSteamIds.begin(), this->checkedSteamIds.end(), _steamId) != this->checkedSteamIds.end()) {
+            return true;
+        }
     }
     bool kick = false;
-    auto steamIdStr = std::to_string(_steamId);
 
     // SteamAPI is set up
     if (this->steamApi) {
@@ -372,7 +357,7 @@ bool EpochServer::initPlayerCheck(uint64 _steamId) {
                     INFO(log.str());
                 }
 
-                this->addBan(_steamId, "VAC Ban");
+                this->beBan(this->__getBattlEyeGUID(_steamId), "VAC Ban", -1);
                 kick = true;
             }
             if (!kick && this->minDaysSinceLastVacBan > 0 && bans.DaysSinceLastBan < this->minDaysSinceLastVacBan) {
@@ -383,7 +368,7 @@ bool EpochServer::initPlayerCheck(uint64 _steamId) {
                     INFO(log.str());
                 }
 
-                this->addBan(_steamId, "VAC Ban");
+                this->beBan(this->__getBattlEyeGUID(_steamId), "VAC Ban", -1);
                 kick = true;
             }
             if (!kick && this->maxVacBans > 0 && bans.NumberOfGameBans >= this->maxVacBans) {
@@ -394,7 +379,7 @@ bool EpochServer::initPlayerCheck(uint64 _steamId) {
                     INFO(log.str());
                 }
 
-                this->addBan(_steamId, "VAC Ban");
+                this->beBan(this->__getBattlEyeGUID(_steamId), "VAC Ban", -1);
                 kick = true;
             }
         }
@@ -423,7 +408,7 @@ bool EpochServer::initPlayerCheck(uint64 _steamId) {
                         INFO(log.str());
                     }
 
-                    this->addBan(_steamId, "New account filter");
+                    this->beBan(this->__getBattlEyeGUID(_steamId), "Account not old enough", -1);
                     kick = true;
                 }
             }
@@ -431,9 +416,8 @@ bool EpochServer::initPlayerCheck(uint64 _steamId) {
 
         // Not kick -> fine
         if (!kick) {
-            this->checkedSteamIdsMutex.lock();
+            std::unique_lock<std::mutex> lock(this->checkedSteamIdsMutex);
             this->checkedSteamIds.push_back(_steamId);
-            this->checkedSteamIdsMutex.unlock();
         }
         else {
             this->beKick(steamIdStr);
@@ -443,116 +427,24 @@ bool EpochServer::initPlayerCheck(uint64 _steamId) {
     return !kick;
 }
 
-void EpochServer::addBan(uint64 _steamId, const std::string& _reason) {
-    std::string battleyeGUID = this->__getBattlEyeGUID(_steamId);
-    this->rcon->add_ban(battleyeGUID, _reason);
-}
-
-std::string EpochServer::updatePublicVariable(const std::vector<std::string>& _whitelistStrings) {
-    /* TODO
-    std::string pvFilename = this->config.battlEyePath + "/publicvariable.txt";
-    std::string pvContent = "";
-    bool pvFileOriginalFound = false;
-    SQF returnSQF;
-
-    // Try to read the original file content
-    std::ifstream pvFileOriginal(pvFilename + ".original");
-    if (pvFileOriginal.good()) {
-        // Jump to the end
-        pvFileOriginal.seekg(0, std::ios::end);
-        // Allocate memory
-        pvContent.reserve((unsigned int)pvFileOriginal.tellg());
-        // Jump to the begin
-        pvFileOriginal.seekg(0, std::ios::beg);
-        // Assing content
-        pvContent.assign(std::istreambuf_iterator<char>(pvFileOriginal), std::istreambuf_iterator<char>());
-
-        pvFileOriginalFound = true;
-    }
-    pvFileOriginal.close();
-
-    // Original file not found
-    if (!pvFileOriginalFound) {
-        std::ifstream pvFileCurrent(pvFilename);
-        if (pvFileCurrent.good()) {
-            // Jump to the end
-            pvFileCurrent.seekg(0, std::ios::end);
-            // Allocate memory
-            pvContent.reserve((unsigned int)pvFileCurrent.tellg());
-            // Jump to the begin
-            pvFileCurrent.seekg(0, std::ios::beg);
-            // Assing content
-            pvContent.assign(std::string(std::istreambuf_iterator<char>(pvFileCurrent), std::istreambuf_iterator<char>()));
-
-            pvFileCurrent.close();
-        }
-        else {
-            pvFileCurrent.close();
-            returnSQF.push_str("0");
-            INFO("publicvariable.txt not found in " + this->config.battlEyePath);
-            return returnSQF.toArray();
-        }
-
-        // Copy content to the original file
-        std::ofstream pvFileOriginalNew(pvFilename + ".original");
-        if (pvFileOriginalNew.good()) {
-            pvFileOriginalNew << pvContent;
-            pvFileOriginalNew.close();
-        }
-        else {
-            pvFileOriginalNew.close();
-            returnSQF.push_str("0");
-            return returnSQF.toArray();
-        }
-    }
-
-    // write new pvFile
-    std::ofstream pvFileNew(pvFilename);
-    if (pvFileNew.good()) {
-        pvFileNew << pvContent;
-
-        for (auto it = _whitelistStrings.begin(); it != _whitelistStrings.end(); it++) {
-            pvFileNew << " !=\"" << *it << "\"";
-        }
-
-        returnSQF.push_str("1");
-    }
-    else {
-        returnSQF.push_str("0");
-    }
-    pvFileNew.close();
-    
-    INFO("BEClient: try to connect " + this->config.battlEye.ip);
-    BEClient bec     (this->config.battlEye.ip.c_str(), this->config.battlEye.port);
-    bec.sendLogin    (this->config.battlEye.password.c_str());
-    bec.readResponse (BE_LOGIN);
-    if (bec.isLoggedIn()) {
-        INFO("BEClient: logged in!");
-        bec.sendCommand  ("loadEvents");
-        bec.readResponse (BE_COMMAND);
-    } else {
-        INFO("BEClient: login failed!");
-    }
-    bec.disconnect();
-    */
-
-    return "";
-}
-
 std::string EpochServer::getRandomString() {
-    
-    // Define char pool
-    const char charPool[] = "abcdefghijklmnopqrstuvwxyz";
-    int charPoolSize = sizeof(charPool) - 1;
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
 
-    std::string randomString;
-    int stringLength = (std::rand() % 5) + 5; //random string size between 5-10
+    std::uniform_int_distribution<> dis('a', 'z');
 
-    for (int i = 0; i < stringLength; i++) {
-        randomString += charPool[std::rand() % charPoolSize];
+    unsigned short strLen = 10;
+    std::string str;
+    str.reserve(strLen);
+    for (int i = 0; i < strLen; i++) {
+        str += static_cast<char>(dis(gen));
     }
+    return str;
+}
 
-    return randomString;
+std::string EpochServer::getStringMd5(const std::string& stringToHash) {
+    MD5 md5 = MD5(stringToHash);
+    return md5.hexdigest();
 }
 
 std::vector<std::string> EpochServer::getStringMd5(const std::vector<std::string>& _stringsToHash) {
@@ -561,8 +453,7 @@ std::vector<std::string> EpochServer::getStringMd5(const std::vector<std::string
     out.reserve(_stringsToHash.size());
 
     for (auto it = _stringsToHash.begin(); it != _stringsToHash.end(); ++it) {
-        MD5 md5 = MD5(*it);
-        out.emplace_back(md5.hexdigest());
+        out.emplace_back(this->getStringMd5(*it));
     }
 
     return out;
@@ -597,7 +488,7 @@ std::string EpochServer::__getBattlEyeGUID(uint64 _steamId) {
     return MD5(bestring.str()).hexdigest();
 }
 
-// Battleye Integration
+// Battleye / RCON Integration
 
 void EpochServer::beBroadcastMessage(const std::string& msg) {
     if (msg.empty() || !this->rcon) {
@@ -643,4 +534,110 @@ void EpochServer::beUnlock() {
 
 void EpochServer::log(const std::string& log) {
     INFO(log);
+}
+
+#define SET_RESULT(x,y) outCode = x; out = y;
+
+
+// TODO test if moving args works
+int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const char *function, const char **args, int argsCnt) {
+
+    std::string out;
+    int outCode = 0;
+
+    if (!strcmp(function, "log")) {
+        if (argsCnt > 0) {
+            threadpool->enqueue([x = std::string(args[0])]() {
+                INFO(x);
+            });
+        }
+        else {
+            SET_RESULT(1, "missing params");
+        }
+    }
+    else if (!strcmp(function, "playerCheck")) {
+        if (argsCnt > 0) {
+            threadpool->enqueue([this, x = std::string(args[0])]() {
+                this->initPlayerCheck(x);
+            });
+        }
+        else {
+            SET_RESULT(1, "missing params");
+        }
+    }
+    else if (!strncmp(function, "be", 2)) {
+        if (!strcmp(function, "beBroadcastMessage")) {
+            //(const std::string& message);
+            if (argsCnt > 0) {
+                threadpool->enqueue([this, x = std::string(args[0])]() {
+                    this->beBroadcastMessage(x);
+                });
+            }
+            else {
+                SET_RESULT(1, "missing params");
+            }
+        }
+        else if (!strcmp(function, "beKick")) {
+            //(const std::string& playerGUID);
+            if (argsCnt > 0) {
+                threadpool->enqueue([this, x = std::string(args[0])]() {
+                    this->beKick(x);
+                });
+            }
+            else {
+                SET_RESULT(1, "missing params");
+            }
+        }
+        else if (!strcmp(function, "beBan")) {
+            // (const std::string& playerGUID, const std::string& message, int duration);
+            if (argsCnt > 2) {
+                threadpool->enqueue([this, uid = std::string(args[0]), msg = std::string(args[1]), dur = std::string(args[2])]() {
+                    this->beBan(uid, msg, std::stoi(dur));
+                });
+            }
+            else {
+                SET_RESULT(1, "missing params");
+            }
+        }
+        else if (!strcmp(function, "beShutdown")) {
+            this->beShutdown();
+        }
+        else if (!strcmp(function, "beLock")) {
+            threadpool->enqueue([this]() {
+                this->beLock();
+            });
+        }
+        else if (!strcmp(function, "beUnlock")) {
+            threadpool->enqueue([this]() {
+                this->beUnlock();
+            });
+        }
+    }
+    else if (!strncmp(function, "db", 2)) {
+        // TODO Database commands
+    }
+    else if (!strcmp(function, "getCurrentTime")) {
+        SET_RESULT(0, this->getCurrentTime());
+    }
+    else if (!strcmp(function, "getRandomString")) {
+        SET_RESULT(0, this->getRandomString());
+    }
+    else if (!strcmp(function, "getStringMd5")) {
+        // string
+        if (argsCnt > 0) {
+            SET_RESULT(0, this->getStringMd5(args[0]));
+        }
+        else {
+            SET_RESULT(1, "missing params");
+        }
+    }
+    else if (!strcmp(function, "version")) {
+        SET_RESULT(1, "0.1.0.0");
+    }
+    else {
+        SET_RESULT(1, "Unknown function");
+    }
+    
+    strncpy_s(output, outputSize, out.c_str(), _TRUNCATE);
+    return outCode;
 }

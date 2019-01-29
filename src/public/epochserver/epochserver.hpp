@@ -24,6 +24,9 @@ private:
     std::mutex checkedSteamIdsMutex;
     std::vector<uint64> checkedSteamIds;
     
+    /**
+    * steam api config
+    **/
     std::string steamApiKey;
     std::unique_ptr<SteamAPI> steamApi = nullptr;
     short steamApiLogLevel = 0;
@@ -59,6 +62,9 @@ public:
     EpochServer();
     ~EpochServer();
 
+    /**
+    *  \brief Entrypoint that maps strings to functions for Arma's callExtension
+    **/
     int callExtensionEntrypoint(char *output, int outputSize, const char *function, const char **args, int argsCnt);
 
     /** 
@@ -66,21 +72,8 @@ public:
     *  \param steamId 64Bit Steam community id
     *  \return bool true if player was allowed to join, false if kicked
     **/
-    bool initPlayerCheck(uint64 steamId);
+    bool initPlayerCheck(const std::string& steamId);
 
-    /** 
-    *  \brief Add ban with reason to bans.txt
-    *  \param steamId 64Bit Steam community id
-    *  \param reason
-    **/
-    void addBan(uint64 steamId, const std::string& reason);
-
-    /** 
-    *  Add whitelisted string to publicvariable.txt
-    *  String needs to be whitelisted
-    **/
-    std::string updatePublicVariable(const std::vector<std::string>& whitelistStrings);
-    
     /**
     *  \brief Get random string
     **/
@@ -89,6 +82,7 @@ public:
     /**
     *  \brief Get md5 hashes of strings
     **/
+    std::string getStringMd5(const std::string& stringToHash);
     std::vector<std::string> getStringMd5(const std::vector<std::string>& stringsToHash);
 
     /** 
