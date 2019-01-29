@@ -122,6 +122,16 @@ namespace utils {
         return (s1.find(s2) == s1.length() - s2.length());
     }
 
+    bool iequals(const std::string& a, const std::string& b) {
+        return std::equal(
+            a.begin(), a.end(),
+            b.begin(), b.end(),
+            [](char a, char b) {
+                return tolower(a) == tolower(b);
+            }
+        );
+    }
+
     void replace_all(std::string &s1, const std::string &s2, const std::string &s3) {
         std::size_t iter = 0;
         while ((iter = s1.find(s2, iter)) != std::string::npos) {
@@ -133,6 +143,37 @@ namespace utils {
         if (s.size() > 0 && s.at(0) == '"') {
             s = s.substr(1, s.size() - 2);
         }
+    }
+
+    typedef std::chrono::system_clock sysclock;
+    typedef std::chrono::time_point<std::chrono::system_clock> timestamp;
+    long long seconds_since(const utils::timestamp& _t) {
+        return std::chrono::duration_cast<std::chrono::seconds>(sysclock::now() - _t).count();
+    }
+
+    long long minutes_since(const utils::timestamp& _t) {
+        return std::chrono::duration_cast<std::chrono::minutes>(sysclock::now() - _t).count();
+    }
+
+    long long mili_seconds_since(const utils::timestamp& _t) {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(sysclock::now() - _t).count();
+    }
+
+    template<typename T>
+    T* pointerFromString(const std::string& _str) {
+        std::stringstream _ss;
+        _ss << _str;
+        long long unsigned int _adr;
+        _ss >> std::hex >> _adr;
+        T * _data = reinterpret_cast<T *>(_adr);
+        return _data;
+    }
+
+    template<typename T>
+    std::string pointerToString(T* _ptr) {
+        std::stringstream _ss;
+        _ss << (void const *)_ptr;
+        return _ss.str();
     }
 };
 
