@@ -4,7 +4,7 @@
 #include <mutex>
 #include <atomic>
 
-
+#define ASIO_STANDALONE
 #include <asio.hpp>
 
 
