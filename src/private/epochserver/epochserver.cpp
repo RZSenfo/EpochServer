@@ -43,7 +43,7 @@ EpochServer::EpochServer() {
         this->__setupBattlEye(d["battleye"]);
     }
     catch (std::runtime_error& x) {
-        WARNING(x.what);
+        WARNING(x.what());
         std::exit(1);
     }
 
@@ -52,7 +52,7 @@ EpochServer::EpochServer() {
             this->__setupSteamApi(d["steamapi"]);
         }
         catch (std::runtime_error& x) {
-            WARNING(x.what);
+            WARNING(x.what());
             std::exit(1);
         }
     }
@@ -70,7 +70,7 @@ EpochServer::EpochServer() {
         }
     }
     catch (std::runtime_error& x) {
-        WARNING(x.what);
+        WARNING(x.what());
         std::exit(1);
     }
     
@@ -275,16 +275,16 @@ void EpochServer::__setupConnection(const std::string& name, const rapidjson::Va
             for (auto itr = paramslist.begin(); itr != paramslist.end(); ++itr) {
                 auto typeStr = itr->GetString();
                 if (typeStr == "number") {
-                    statement.params.emplace_back(DBSQLStatementParamType::NUMBER);
+                    statement.params.emplace_back(DBSQLStatementParamType::DB_NUMBER);
                 }
                 else if (typeStr == "array") {
-                    statement.params.emplace_back(DBSQLStatementParamType::ARRAY);
+                    statement.params.emplace_back(DBSQLStatementParamType::DB_ARRAY);
                 }
                 else if (typeStr == "bool") {
-                    statement.params.emplace_back(DBSQLStatementParamType::BOOL);
+                    statement.params.emplace_back(DBSQLStatementParamType::DB_BOOL);
                 }
                 else if (typeStr == "string") {
-                    statement.params.emplace_back(DBSQLStatementParamType::STRING);
+                    statement.params.emplace_back(DBSQLStatementParamType::DB_STRING);
                 }
                 else {
                     throw std::runtime_error("Unknown type in params types of " + statementName);
@@ -296,16 +296,16 @@ void EpochServer::__setupConnection(const std::string& name, const rapidjson::Va
             for (auto itr = resultslist.begin(); itr != resultslist.end(); ++itr) {
                 auto typeStr = itr->GetString();
                 if (typeStr == "number") {
-                    statement.result.emplace_back(DBSQLStatementParamType::NUMBER);
+                    statement.result.emplace_back(DBSQLStatementParamType::DB_NUMBER);
                 }
                 else if (typeStr == "array") {
-                    statement.result.emplace_back(DBSQLStatementParamType::ARRAY);
+                    statement.result.emplace_back(DBSQLStatementParamType::DB_ARRAY);
                 }
                 else if (typeStr == "bool") {
-                    statement.result.emplace_back(DBSQLStatementParamType::BOOL);
+                    statement.result.emplace_back(DBSQLStatementParamType::DB_BOOL);
                 }
                 else if (typeStr == "string") {
-                    statement.result.emplace_back(DBSQLStatementParamType::STRING);
+                    statement.result.emplace_back(DBSQLStatementParamType::DB_STRING);
                 }
                 else {
                     throw std::runtime_error("Unknown type in result types of " + statementName);
@@ -315,6 +315,10 @@ void EpochServer::__setupConnection(const std::string& name, const rapidjson::Va
             dbConf.statements.emplace_back(statement);
         }
     }
+
+    this->dbWorkers.emplace_back(
+        std::pair< std::string, std::shared_ptr<DBWorker> >( name, std::make_shared<DBWorker>(dbConf) )
+    );
     
 }
 
@@ -326,7 +330,7 @@ bool EpochServer::initPlayerCheck(const std::string& steamIdStr) {
 
     auto _steamId = std::stoull(steamIdStr);
     {
-        std::shared_lock<std::mutex> lock(this->checkedSteamIdsMutex);
+        std::shared_lock<std::shared_mutex> lock(this->checkedSteamIdsMutex);
         // already looked up
         if (std::find(this->checkedSteamIds.begin(), this->checkedSteamIds.end(), _steamId) != this->checkedSteamIds.end()) {
             return true;
@@ -416,7 +420,7 @@ bool EpochServer::initPlayerCheck(const std::string& steamIdStr) {
 
         // Not kick -> fine
         if (!kick) {
-            std::unique_lock<std::mutex> lock(this->checkedSteamIdsMutex);
+            std::unique_lock<std::shared_mutex> lock(this->checkedSteamIdsMutex);
             this->checkedSteamIds.push_back(_steamId);
         }
         else {
@@ -536,8 +540,16 @@ void EpochServer::log(const std::string& log) {
     INFO(log);
 }
 
-#define SET_RESULT(x,y) outCode = x; out = y;
+std::shared_ptr<DBWorker> EpochServer::__getDbWorker(const std::string& name) {
+    for (auto& x : this->dbWorkers) {
+        if (x.first == name) {
+            return x.second;
+        }
+    }
+    return nullptr;
+}
 
+#define SET_RESULT(x,y) outCode = x; out = y;
 
 // TODO test if moving args works
 int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const char *function, const char **args, int argsCnt) {
@@ -545,27 +557,7 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
     std::string out;
     int outCode = 0;
 
-    if (!strcmp(function, "log")) {
-        if (argsCnt > 0) {
-            threadpool->enqueue([x = std::string(args[0])]() {
-                INFO(x);
-            });
-        }
-        else {
-            SET_RESULT(1, "missing params");
-        }
-    }
-    else if (!strcmp(function, "playerCheck")) {
-        if (argsCnt > 0) {
-            threadpool->enqueue([this, x = std::string(args[0])]() {
-                this->initPlayerCheck(x);
-            });
-        }
-        else {
-            SET_RESULT(1, "missing params");
-        }
-    }
-    else if (!strncmp(function, "be", 2)) {
+    if (!strncmp(function, "be", 2)) {
         if (!strcmp(function, "beBroadcastMessage")) {
             //(const std::string& message);
             if (argsCnt > 0) {
@@ -612,9 +604,197 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
                 this->beUnlock();
             });
         }
+        else {
+            SET_RESULT(1, "Unknown be command");
+        }
     }
     else if (!strncmp(function, "db", 2)) {
-        // TODO Database commands
+        // skip prefix
+        function += 2;
+
+        if (!strcmp(function, "Poll")) {
+            if (argsCnt > 1) {
+                auto &worker = this->__getDbWorker(args[0]);
+
+                unsigned long id = std::stoul(args[0]);
+                if (worker->isResultReady(id)) {
+                    auto res = worker->popResult(id);
+                    if (res.index() == 0) {
+                        SET_RESULT(0, std::get<std::string>(res));
+                    }
+                    else if (res.index() == 1) {
+                        SET_RESULT(0, std::to_string(std::get<bool>(res)));
+                    }
+                    else {
+                        SET_RESULT(0, std::to_string(std::get<double>(res)));
+                    }
+                }
+                else {
+                    SET_RESULT(1, "result unknown or not ready");
+                }
+            }
+            else {
+                SET_RESULT(1, "id missing for db poll");
+            }
+        }
+        else if (!strcmp(function, "Get")) {
+            if (argsCnt > 1) {
+                auto &worker = this->__getDbWorker(args[0]);
+
+                DBStatementOptions opts;
+                opts.type = DBExecutionType::ASYNC_POLL;
+
+                unsigned long id;
+                worker->get(opts, args[1], id);
+                SET_RESULT(0, std::to_string(id));
+            }
+            else {
+                SET_RESULT(1, "not enough args for db call");
+            }
+        }
+        else if (!strcmp(function, "Exists")) {
+            if (argsCnt > 1) {
+                auto &worker = this->__getDbWorker(args[0]);
+
+                DBStatementOptions opts;
+                opts.type = DBExecutionType::ASYNC_POLL;
+
+                unsigned long id;
+                worker->exists(opts, args[1], id);
+                SET_RESULT(0, std::to_string(id));
+            }
+            else {
+                SET_RESULT(1, "not enough args for db call");
+            }
+        }
+        else if (!strcmp(function, "Set")) {
+            if (argsCnt > 2) {
+                auto &worker = this->__getDbWorker(args[0]);
+
+                DBStatementOptions opts;
+                opts.type = DBExecutionType::ASYNC_POLL;
+
+                unsigned long id;
+                worker->set(opts, args[1], args[2], id);
+                SET_RESULT(0, std::to_string(id));
+            }
+            else {
+                SET_RESULT(1, "not enough args for db call");
+            }
+        }
+        else if (!strcmp(function, "SetEx")) {
+            if (argsCnt > 3) {
+                auto &worker = this->__getDbWorker(args[0]);
+
+                DBStatementOptions opts;
+                opts.type = DBExecutionType::ASYNC_POLL;
+
+                unsigned long id;
+                worker->setEx(opts, args[1], std::stoi(args[2]), args[3], id);
+                SET_RESULT(0, std::to_string(id));
+            }
+            else {
+                SET_RESULT(1, "not enough args for db call");
+            }
+        }
+        else if (!strcmp(function, "Expire")) {
+            if (argsCnt > 2) {
+                auto &worker = this->__getDbWorker(args[0]);
+
+                DBStatementOptions opts;
+                opts.type = DBExecutionType::ASYNC_POLL;
+
+                unsigned long id;
+                worker->expire(opts, args[1], std::stoi(args[2]), id);
+                SET_RESULT(0, std::to_string(id));
+            }
+            else {
+                SET_RESULT(1, "not enough args for db call");
+            }
+        }
+        else if (!strcmp(function, "Del")) {
+            if (argsCnt > 1) {
+                auto &worker = this->__getDbWorker(args[0]);
+
+                DBStatementOptions opts;
+                opts.type = DBExecutionType::ASYNC_POLL;
+
+                unsigned long id;
+                worker->del(opts, args[1], id);
+                SET_RESULT(0, std::to_string(id));
+            }
+            else {
+                SET_RESULT(1, "not enough args for db call");
+            }
+        }
+        else if (!strcmp(function, "Query")) {
+            // TODO
+            SET_RESULT(1, "TODO");
+        }
+        else if (!strcmp(function, "GetRange")) {
+            if (argsCnt > 3) {
+                auto &worker = this->__getDbWorker(args[0]);
+
+                DBStatementOptions opts;
+                opts.type = DBExecutionType::ASYNC_POLL;
+
+                unsigned long id;
+                worker->getRange(opts, args[1], std::stoul(args[2]), std::stoul(args[3]), id);
+                SET_RESULT(0, std::to_string(id));
+            }
+            else {
+                SET_RESULT(1, "not enough args for db call");
+            }
+        }
+        else if (!strcmp(function, "GetTtl")) {
+            // TODO this should return a pair.. but how?!
+            if (argsCnt > 1) {
+                auto &worker = this->__getDbWorker(args[0]);
+
+                DBStatementOptions opts;
+                opts.type = DBExecutionType::ASYNC_POLL;
+
+                unsigned long id;
+                worker->getTtl(opts, args[1], id);
+                SET_RESULT(0, std::to_string(id));
+            }
+            else {
+                SET_RESULT(1, "not enough args for db call");
+            }
+        }
+        else if (!strcmp(function, "Ping")) {
+            auto &worker = this->__getDbWorker(args[0]);
+
+            DBStatementOptions opts;
+            opts.type = DBExecutionType::ASYNC_POLL;
+
+            unsigned long id;
+            worker->ping(opts, id);
+            SET_RESULT(0, std::to_string(id));
+        }
+        else {
+            SET_RESULT(1, "Unknown db command");
+        }
+    }
+    else if (!strcmp(function, "log")) {
+        if (argsCnt > 0) {
+            threadpool->enqueue([x = std::string(args[0])]() {
+                INFO(x);
+            });
+        }
+        else {
+            SET_RESULT(1, "missing params");
+        }
+    }
+    else if (!strcmp(function, "playerCheck")) {
+        if (argsCnt > 0) {
+            threadpool->enqueue([this, x = std::string(args[0])]() {
+                this->initPlayerCheck(x);
+            });
+        }
+        else {
+            SET_RESULT(1, "missing params");
+        }
     }
     else if (!strcmp(function, "getCurrentTime")) {
         SET_RESULT(0, this->getCurrentTime());

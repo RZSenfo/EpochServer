@@ -82,7 +82,7 @@ private:
     **/
     
     /*!< unique id returned for polling results */
-    unsigned long currentId = 0;
+    std::atomic<unsigned long> currentId = 0;
     
     /*!< results storage */
     std::vector<std::pair< unsigned long, std::shared_future<DBReturn> > > results; 
@@ -145,11 +145,13 @@ private:
       *   \param result std::shared_future<DBReturn> future to the result of the Database call
       *
       **/
-    void insertFutureIfNeeded(const DBStatementOptions& statement, const std::shared_future<DBReturn>& fut) {
+    unsigned long insertFutureIfNeeded(const DBStatementOptions& statement, const std::shared_future<DBReturn>& fut) {
         if (statement.type == DBExecutionType::ASYNC_POLL) {
             std::unique_lock<std::shared_mutex> lock(this->resultsMutex);
-            this->results.emplace_back(std::pair<unsigned long, std::shared_future<DBReturn> >(this->currentId++, fut));
+            unsigned long id = this->currentId++;
+            this->results.emplace_back(std::pair<unsigned long, std::shared_future<DBReturn> >(id, fut));
         }
+        return -1;
     }
 
     /**
@@ -298,7 +300,7 @@ public:
                 };
             }
             catch (const std::runtime_error& e) {
-                WARNING("Runtime Error during connector creation:" + e.what);
+                WARNING(std::string("Runtime Error during connector creation:") + e.what());
                 throw std::runtime_error("Could not create database connector");
             }
 
@@ -375,7 +377,7 @@ public:
     *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     **/
-    std::shared_future<DBReturn> get(const DBStatementOptions& statement, const std::string& key) {
+    std::shared_future<DBReturn> get(const DBStatementOptions& statement, const std::string& key, unsigned long& id) {
         auto fut = threadpool->enqueue(
             [this, key{ std::move(key) }, statement{ std::move(statement) }](){
                 auto& db = this->getConnector();
@@ -384,7 +386,7 @@ public:
                 return DBReturn(result);
             }
         ).share();
-        this->insertFutureIfNeeded(statement, fut);
+        id = this->insertFutureIfNeeded(statement, fut);
         return fut;
     };
 
@@ -397,7 +399,7 @@ public:
     *  \param to unsigned int
     *
     **/
-    std::shared_future<DBReturn> getRange(const DBStatementOptions& statement, const std::string& key, unsigned int from, unsigned int to) {
+    std::shared_future<DBReturn> getRange(const DBStatementOptions& statement, const std::string& key, unsigned int from, unsigned int to, unsigned long& id) {
         auto fut = threadpool->enqueue(
             [this, key{ std::move(key) }, from{ std::move(from) }, to{ std::move(to) }, statement{ std::move(statement) }](){
                 auto& db = this->getConnector();
@@ -406,7 +408,7 @@ public:
                 return DBReturn(result);
             }
         ).share();
-        this->insertFutureIfNeeded(statement, fut);
+        id = this->insertFutureIfNeeded(statement, fut);
         return fut;
     };
 
@@ -416,7 +418,7 @@ public:
     *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     **/
-    std::shared_future<DBReturn> getTtl(const DBStatementOptions& statement, const std::string& key) {
+    std::shared_future<DBReturn> getTtl(const DBStatementOptions& statement, const std::string& key, unsigned long& id) {
         auto fut = threadpool->enqueue(
             [this, key{ std::move(key) }, statement{ std::move(statement) }](){
                 auto& db = this->getConnector();
@@ -425,7 +427,7 @@ public:
                 return DBReturn((float)result);
             }
         ).share();
-        this->insertFutureIfNeeded(statement, fut);
+        id = this->insertFutureIfNeeded(statement, fut);
         return fut;
     };
 
@@ -435,7 +437,7 @@ public:
     *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     **/
-    std::shared_future<DBReturn> exists(const DBStatementOptions& statement, const std::string& key) {
+    std::shared_future<DBReturn> exists(const DBStatementOptions& statement, const std::string& key, unsigned long& id) {
         auto fut = threadpool->enqueue(
             [this, key{ std::move(key) }, statement{ std::move(statement) }](){
                 auto& db = this->getConnector();
@@ -444,7 +446,7 @@ public:
                 return DBReturn(result);
             }
         ).share();
-        this->insertFutureIfNeeded(statement, fut);
+        id = this->insertFutureIfNeeded(statement, fut);
         return fut;
     };
 
@@ -455,7 +457,7 @@ public:
     *  \param key const std::string&
     *  \param value const std::string&
     **/
-    std::shared_future<DBReturn> set(const DBStatementOptions& statement, const std::string& key, const std::string& value) {
+    std::shared_future<DBReturn> set(const DBStatementOptions& statement, const std::string& key, const std::string& value, unsigned long& id) {
         auto fut = threadpool->enqueue(
             [this, key{ std::move(key) }, value{ std::move(value) }, statement{ std::move(statement) }](){
                 auto& db = this->getConnector();
@@ -464,7 +466,7 @@ public:
                 return DBReturn(result);
             }
         ).share();
-        this->insertFutureIfNeeded(statement, fut);
+        id = this->insertFutureIfNeeded(statement, fut);
         return fut;
     };
 
@@ -476,7 +478,7 @@ public:
     *  \param ttl int
     *  \param value const std::string&
     **/
-    std::shared_future<DBReturn> setEx(const DBStatementOptions& statement, const std::string& key, int ttl, const std::string& value) {
+    std::shared_future<DBReturn> setEx(const DBStatementOptions& statement, const std::string& key, int ttl, const std::string& value, unsigned long& id) {
         auto fut = threadpool->enqueue(
             [this, key{ std::move(key) }, value{ std::move(value) }, ttl{ std::move(ttl) }, statement{ std::move(statement) }](){
                 auto& db = this->getConnector();
@@ -485,7 +487,7 @@ public:
                 return DBReturn(result);
             }
         ).share();
-        this->insertFutureIfNeeded(statement, fut);
+        id = this->insertFutureIfNeeded(statement, fut);
         return fut;
     };
 
@@ -497,7 +499,7 @@ public:
     *  \param value const std::string&
     *  \param ttl int
     **/
-    std::shared_future<DBReturn> expire(const DBStatementOptions& statement, const std::string& key, int ttl) {
+    std::shared_future<DBReturn> expire(const DBStatementOptions& statement, const std::string& key, int ttl, unsigned long& id) {
         auto fut = threadpool->enqueue(
             [this, key{ std::move(key) }, ttl{ std::move(ttl) }, statement{ std::move(statement) }](){
                 auto& db = this->getConnector();
@@ -506,7 +508,7 @@ public:
                 return DBReturn(result);
             }
         ).share();
-        this->insertFutureIfNeeded(statement, fut);
+        id = this->insertFutureIfNeeded(statement, fut);
         return fut;
     };
 
@@ -516,7 +518,7 @@ public:
     *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     **/
-    std::shared_future<DBReturn> del(const DBStatementOptions& statement, const std::string& key) {
+    std::shared_future<DBReturn> del(const DBStatementOptions& statement, const std::string& key, unsigned long& id) {
         auto fut = threadpool->enqueue(
             [this, key{ std::move(key) }, statement{ std::move(statement) }](){
                 auto& db = this->getConnector();
@@ -525,7 +527,7 @@ public:
                 return DBReturn(result);
             }
         ).share();
-        this->insertFutureIfNeeded(statement, fut);
+        id = this->insertFutureIfNeeded(statement, fut);
         return fut;
     };
 
@@ -533,7 +535,7 @@ public:
     *  \brief DB PING
     *
     **/
-    std::shared_future<DBReturn> ping(const DBStatementOptions& statement) {
+    std::shared_future<DBReturn> ping(const DBStatementOptions& statement, unsigned long& id) {
         auto fut = threadpool->enqueue(
             [this, statement{ std::move(statement) }](){
                 auto& db = this->getConnector();
@@ -542,7 +544,7 @@ public:
                 return DBReturn(result);
             }
         ).share();
-        this->insertFutureIfNeeded(statement, fut);
+        id = this->insertFutureIfNeeded(statement, fut);
         return fut;
     };
 
@@ -552,7 +554,7 @@ public:
     *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     **/
-    std::shared_future<DBReturn> ttl(const DBStatementOptions& statement, const std::string& key) {
+    std::shared_future<DBReturn> ttl(const DBStatementOptions& statement, const std::string& key, unsigned long& id) {
         auto fut = threadpool->enqueue(
             [this, key{ std::move(key) }, statement{ std::move(statement) }](){
                 auto& db = this->getConnector();
@@ -561,7 +563,7 @@ public:
                 return DBReturn(result);
             }
         ).share();
-        this->insertFutureIfNeeded(statement, fut);
+        id = this->insertFutureIfNeeded(statement, fut);
         return fut;
     };
 

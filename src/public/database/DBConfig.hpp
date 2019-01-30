@@ -12,10 +12,10 @@ enum DBType {
 };
 
 enum DBSQLStatementParamType {
-    NUMBER,
-    BOOL,
-    STRING,
-    ARRAY
+    DB_NUMBER,
+    DB_BOOL,
+    DB_STRING,
+    DB_ARRAY
 };
 
 struct DBSQLStatementTemplate {
