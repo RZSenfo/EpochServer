@@ -21,7 +21,7 @@ private:
     /** 
     * steam id check cache
     **/
-    std::mutex checkedSteamIdsMutex;
+    std::shared_mutex checkedSteamIdsMutex;
     std::vector<uint64> checkedSteamIds;
     
     /**
@@ -47,7 +47,7 @@ private:
     /**
     * Database Access
     **/
-    std::vector<std::pair<std::string, DBWorker> > dbWorkers;
+    std::vector<std::pair<std::string, std::shared_ptr<DBWorker> > > dbWorkers;
 
     /**
     *  Helpers
@@ -56,6 +56,7 @@ private:
     void __setupBattlEye(const rapidjson::Value& config);
     void __setupSteamApi(const rapidjson::Value& config);
     void __setupConnection(const std::string& name, const rapidjson::Value& config);
+    std::shared_ptr<DBWorker> __getDbWorker(const std::string& name);
 
 public:
     
