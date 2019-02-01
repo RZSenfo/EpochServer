@@ -6,41 +6,46 @@
 #include <database/DBConnector.hpp>
 #include <main.hpp>
 
+// flag to use mysql_library_init()
+// this is not done by mariadbpp, thus it would not be threadsafe to creation and use connections
+namespace MySQLConnector_Detail {
+    static bool is_first_connection = true;
+};
+
 class MySQLConnector : public DBConnector {
 private:
     
-    std::unique_ptr<mariadb::connection> con;
+    DBConfig config;
+    std::shared_ptr<mariadb::connection> con;
+    std::string defaultKeyValTableName = "KeyValueTable";
+    bool extendedLogging = false;
     
-    std::vector<DBSQLStatementTemplates> preparedStatements;
+    std::vector<DBSQLStatementTemplate> preparedStatements;
 
-    bool __get(const std::string& table, const std::string& _key, std::string& _result);
     bool __createKeyValueTable(const std::string& tablename);
 
 public:
-    MySQLConnector();
+
+
+    MySQLConnector(const DBConfig& config);
     ~MySQLConnector();
-
-
-    bool init(DBConfig config);
 
     /*
     *  DB GET
     *  Key
     */
     std::string get(const std::string& key);
-    std::string getRange(const std::string& key, const std::string& from, const std::string& to);
-    std::string getTtl(const std::string& key);
-    std::string getbit(const std::string& key, const std::string& value);
+    std::string getRange(const std::string& key, unsigned int from, unsigned int to);
+    std::pair<std::string, int> getWithTtl(const std::string& key);
     bool exists(const std::string& key);
 
     /*
     *  DB SET / SETEX
     */
     bool set(const std::string& key, const std::string& value);
-    bool setex(const std::string& key, const std::string& ttl, const std::string& value);
-    bool expire(const std::string& key, const std::string& ttl);
-    bool setbit(const std::string& key, const std::string& bitidx, const std::string& value);
-
+    bool setEx(const std::string& key, int ttl, const std::string& value);
+    bool expire(const std::string& key, int ttl);
+    
     /*
     *  DB DEL
     *  Key
@@ -56,7 +61,7 @@ public:
     *  DB TTL
     *  Key
     */
-    int ttl(const std::string& Key);
+    int ttl(const std::string& key);
 };
 
 #endif

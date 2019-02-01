@@ -1,57 +1,43 @@
 #ifndef __REDISCONNECTOR_H__
 #define __REDISCONNECTOR_H__
 
-
 #include <database/DBConnector.hpp>
-
-#include <mutex>
-#include <cstdarg>
-
-#define PCRE_STATIC 1
-#include <pcre.h>
-
-struct redisContext; //forward declare
-
-#define REDISCONNECTOR_MAXCONNECTION_RETRIES 3
+#include <main.hpp>
 
 class RedisConnector : public DBConnector {
 
 private:
     DBConfig config;
+    
 
-    std::mutex contextMutex;
-    redisContext *context;
-
-    pcre * setValueRegex;
-
-    void _reconnect(bool force);
-
-    //EpochlibDBExecute execute(const char *RedisCommand, ...);
+    
+    // place holder
+    std::string _DBExecToSQF(const std::string& x, SQF_RETURN_TYPE y);
+    std::string execute(const std::string& x);
+    std::string execute(const std::string& x, const std::string& y);
+    std::string execute(const std::string& x, const std::string& y, const std::string& z);
+    std::string execute(const std::string& x, const std::string& y, const std::string& z, const std::string& a);
 
 public:
-    RedisConnector();
+    RedisConnector(const DBConfig& Config);
     ~RedisConnector();
-
-    bool init(DBConfig Config);
 
     /*
     *  DB GET
     *  Key
     */
     std::string get(const std::string& key);
-    std::string getRange(const std::string& key, const std::string& from, const std::string& to);
-    std::string getTtl(const std::string& key);
-    std::string getbit(const std::string& key, const std::string& value);
+    std::string getRange(const std::string& key, unsigned int from, unsigned int to);
+    std::pair<std::string, int> getWithTtl(const std::string& key);
     bool exists(const std::string& key);
 
     /*
     *  DB SET / SETEX
     */
     bool set(const std::string& key, const std::string& value);
-    bool setex(const std::string& key, const std::string& ttl, const std::string& value);
-    bool expire(const std::string& key, const std::string& ttl);
-    bool setbit(const std::string& key, const std::string& bitidx, const std::string& value);
-
+    bool setEx(const std::string& key, int ttl, const std::string& value);
+    bool expire(const std::string& key, int ttl);
+    
     /*
     *  DB DEL
     *  Key

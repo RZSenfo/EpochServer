@@ -747,7 +747,6 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
             }
         }
         else if (!strcmp(function, "GetTtl")) {
-            // TODO this should return a pair.. but how?!
             if (argsCnt > 1) {
                 auto &worker = this->__getDbWorker(args[0]);
 
@@ -755,7 +754,7 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
                 opts.type = DBExecutionType::ASYNC_POLL;
 
                 unsigned long id;
-                worker->getTtl(opts, args[1], id);
+                worker->getWithTtl(opts, args[1], id);
                 SET_RESULT(0, std::to_string(id));
             }
             else {

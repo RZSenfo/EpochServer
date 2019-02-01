@@ -30,7 +30,7 @@
 *   
 * I did it this way to keep the database as simple as possible
 **/
-typedef std::variant<std::string, bool, double> DBReturn;
+typedef std::variant<std::string, bool, float, std::pair<std::string, float>> DBReturn;
 
 /**
 * Type/Variant of the callback - string: missionnamespace variable, code: actual function code, lambda: use of dbworker as API (internal)
@@ -76,6 +76,7 @@ private:
     /*!< pointers to the db connectors */
     std::vector<std::pair<std::thread::id, std::shared_ptr<DBConnector> > > dbConnectors;
     std::atomic<unsigned int> dbConnectorUID = 0;
+    size_t dbConnectorsCount = 0;
 
     /**
     * Database results (only for polling)
@@ -253,11 +254,43 @@ private:
             }
         }
         auto newID = this->dbConnectorUID++;
-        if (newID >= this->dbConnectors.size()) {
+        if (newID >= this->dbConnectorsCount) {
             throw std::runtime_error("Unexpected amout of threads tried to get database connectors");
         }
+        std::shared_ptr<DBConnector> connector;
+        try {
+            switch (dbConfig.dbType) {
+            case DBType::MY_SQL: {
+                connector = std::make_shared<MySQLConnector>(this->dbConfig);
+                break;
+            }
+            case DBType::SQLITE: {
+                connector = std::make_shared<SQLiteConnector>(this->dbConfig);
+                break;
+            }
+            case DBType::REDIS: {
+                connector = std::make_shared<RedisConnector>(this->dbConfig);
+                break;
+            }
+            default: {
+                WARNING("Unknown Database type");
+                break;
+            }
+            };
+        }
+        catch (const std::runtime_error& e) {
+            WARNING(std::string("Runtime Error during connector creation:") + e.what());
+            throw std::runtime_error("Could not create database connector");
+        }
+        if (!connector) {
+            WARNING("Database connector could not be created");
+            throw std::runtime_error("Database connector could not be created");
+            return;
+        }
+
+        this->dbConnectors[newID].second = connector;
         this->dbConnectors[newID].first = tid;
-        return this->dbConnectors[newID].second;
+        return connector;
     }
 
 public:
@@ -275,43 +308,17 @@ public:
         this->isSqlDB = dbConfig.dbType == DBType::MY_SQL;
 
         // Threadpool threads + current
-        this->dbConnectors.reserve(threadpool->getPoolSize() + 1);
-        for (unsigned int i = 0; i < (threadpool->getPoolSize() + 1); i++) {
-
-            std::shared_ptr<DBConnector> connector;
-            try {
-                switch (dbConfig.dbType) {
-                case DBType::MY_SQL: {
-                    connector = std::make_shared<MySQLConnector>(this->dbConfig);
-                    break;
-                }
-                case DBType::SQLITE: {
-                    connector = std::make_shared<SQLiteConnector>(this->dbConfig);
-                    break;
-                }
-                case DBType::REDIS: {
-                    connector = std::make_shared<RedisConnector>(this->dbConfig);
-                    break;
-                }
-                default: {
-                    WARNING("Unknown Database type");
-                    break;
-                }
-                };
-            }
-            catch (const std::runtime_error& e) {
-                WARNING(std::string("Runtime Error during connector creation:") + e.what());
-                throw std::runtime_error("Could not create database connector");
-            }
-
-            if (!connector) {
-                WARNING("Database connector could not be created");
-                throw std::runtime_error("Database connector could not be created");
-                return;
-            }
-
-            this->dbConnectors.emplace_back(std::pair<std::thread::id, std::shared_ptr<DBConnector> >( std::thread::id(), connector ));
+        this->dbConnectorsCount = threadpool->getPoolSize() + 1;
+        this->dbConnectors.reserve(this->dbConnectorsCount);
+        for (size_t i = 0; i < this->dbConnectorsCount; ++i) {
+            this->dbConnectors.emplace_back(
+                std::pair < std::thread::id, std::shared_ptr<DBConnector> >(
+                    std::thread::id(), nullptr
+                )
+            );
         }
+
+        this->getConnector();
     }
 
     ~DBWorker() {
@@ -418,13 +425,13 @@ public:
     *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     **/
-    std::shared_future<DBReturn> getTtl(const DBStatementOptions& statement, const std::string& key, unsigned long& id) {
+    std::shared_future<DBReturn> getWithTtl(const DBStatementOptions& statement, const std::string& key, unsigned long& id) {
         auto fut = threadpool->enqueue(
             [this, key{ std::move(key) }, statement{ std::move(statement) }](){
                 auto& db = this->getConnector();
-                auto result = db->getTtl(key);
-                this->callbackResultIfNeeded(statement, (float)result);
-                return DBReturn((float)result);
+                auto result = db->getWithTtl(key);
+                this->callbackResultIfNeeded(statement, result);
+                return DBReturn(result);
             }
         ).share();
         id = this->insertFutureIfNeeded(statement, fut);
@@ -558,9 +565,9 @@ public:
         auto fut = threadpool->enqueue(
             [this, key{ std::move(key) }, statement{ std::move(statement) }](){
                 auto& db = this->getConnector();
-                auto result = (double)(db->ttl(key));
-                this->callbackResultIfNeeded(statement, result);
-                return DBReturn(result);
+                auto result = db->ttl(key);
+                this->callbackResultIfNeeded(statement, (float)result);
+                return DBReturn((float)result);
             }
         ).share();
         id = this->insertFutureIfNeeded(statement, fut);
