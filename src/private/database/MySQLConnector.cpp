@@ -115,13 +115,13 @@ std::string MySQLConnector::get(const std::string& _key) {
     }
 }
 
-std::string MySQLConnector::getRange(const std::string& _key, unsigned int from, unsigned int to) {
+std::string MySQLConnector::getRange(const std::string& key, unsigned int from, unsigned int to) {
     
     if (from > to) {
         std::swap(from, to);
     }
     
-    auto x = get(_key);
+    auto x = this->get(key);
 
     if (x.size() < to) {
         return (from >= (x.size()-1)) ? "" : std::string(x.begin() + from, x.end());

@@ -4,11 +4,19 @@
 SQLiteConnector::SQLiteConnector(const DBConfig& config) {
     this->config = config;
 
-    std::lock_guard<std::mutex> lock(SQLiteConnector_Detail::SQLiteDBMutex);
+    std::lock_guard<std::mutex> lock(SQLiteConnector_Detail::db_holder_refs_mutex);
 
+    SQLiteConnector_Detail::db_holder_ref ref;
     try {
-        if (!SQLiteConnector_Detail::SQLiteDB) {
-            SQLiteConnector_Detail::SQLiteDB = std::make_shared<SQLite::Database>(config.dbname+".db3", SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
+
+        if (SQLiteConnector_Detail::db_holder_refs.find(config.dbname) == SQLiteConnector_Detail::db_holder_refs.end()) {
+            auto holder = std::make_shared< SQLiteConnector_Detail::SQLiteDBHolder >();
+            holder->SQLiteDB = std::make_shared<SQLite::Database>(config.dbname + ".db3", SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
+            SQLiteConnector_Detail::db_holder_refs.insert(config.dbname, ref);
+            ref = holder;
+        }
+        else {
+            ref = SQLiteConnector_Detail::db_holder_refs.at(config.dbname);
         }
 
     }
@@ -59,7 +67,18 @@ std::string SQLiteConnector::get(const std::string& key) {
 }
 
 std::string SQLiteConnector::getRange(const std::string& key, unsigned int from, unsigned int to) {
+    if (from > to) {
+        std::swap(from, to);
+    }
 
+    auto x = this->get(key);
+
+    if (x.size() < to) {
+        return (from >= (x.size() - 1)) ? "" : std::string(x.begin() + from, x.end());
+    }
+    else {
+        return (from >= (x.size() - 1)) ? "" : std::string(x.begin() + from, x.begin() + to);
+    }
 }
 
 std::pair<std::string, int> SQLiteConnector::getWithTtl(const std::string& key) {

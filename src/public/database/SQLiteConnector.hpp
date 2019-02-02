@@ -9,8 +9,23 @@
 #include <main.hpp>
 
 namespace SQLiteConnector_Detail {
-    static std::mutex SQLiteDBMutex;
-    static std::shared_ptr<SQLite::Database> SQLiteDB;
+
+    typedef std::shared_ptr< SQLiteDBHolder > db_holder_ref;
+    typedef std::shared_ptr< SQLite::Database > db_ref;
+    
+    class SQLiteDBHolder {
+    public:
+        std::mutex SQLiteDBMutex;
+        db_ref SQLiteDB;
+        SQLiteDBHolder() {};
+        ~SQLiteDBHolder() {
+            // TODO
+        }
+    };
+
+    static std::map< std::string, db_holder_ref > db_holder_refs = {};
+    static std::mutex db_holder_refs_mutex;
+
 };
 
 class SQLiteConnector : public DBConnector {
