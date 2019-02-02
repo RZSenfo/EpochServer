@@ -58,6 +58,8 @@ MySQLConnector::~MySQLConnector() {}
 
 bool MySQLConnector::__createKeyValueTable(const std::string& tableName) {
 
+	if (!this->con) throw std::runtime_error("Mysql DB undefined");
+
     std::string queryExists = "SELECT *\
         FROM information_schema.tables\
         WHERE table_schema = ?\
@@ -99,7 +101,10 @@ bool MySQLConnector::__createKeyValueTable(const std::string& tableName) {
 };
 
 std::string MySQLConnector::get(const std::string& _key) {
-    std::string execQry = "SELECT `value` FROM ? WHERE `key`=? AND (`ttl` IS NULL OR `ttl` > CURRENT_TIMESTAMP())";
+    
+	if (!this->con) throw std::runtime_error("Mysql DB undefined");
+	
+	std::string execQry = "SELECT `value` FROM ? WHERE `key`=? AND (`ttl` IS NULL OR `ttl` > CURRENT_TIMESTAMP())";
 
     auto statement = con->create_statement(execQry);
     statement->set_string(0, this->defaultKeyValTableName);
@@ -116,12 +121,12 @@ std::string MySQLConnector::get(const std::string& _key) {
 }
 
 std::string MySQLConnector::getRange(const std::string& key, unsigned int from, unsigned int to) {
+
+    auto x = this->get(key);
     
     if (from > to) {
         std::swap(from, to);
     }
-    
-    auto x = this->get(key);
 
     if (x.size() < to) {
         return (from >= (x.size()-1)) ? "" : std::string(x.begin() + from, x.end());
@@ -133,6 +138,8 @@ std::string MySQLConnector::getRange(const std::string& key, unsigned int from, 
 
 std::pair<std::string, int> MySQLConnector::getWithTtl(const std::string& _key) {
     
+	if (!this->con) throw std::runtime_error("Mysql DB undefined");
+
     std::string execQry = "SELECT `value`, UNIX_TIMESTAMP(`ttl`), UNIX_TIMESTAMP(CURRENT_TIMESTAMP()) FROM ? WHERE `key`=? AND (`ttl` IS NULL OR `ttl` > CURRENT_TIMESTAMP())";
 
     auto statement = con->create_statement(execQry);
@@ -151,6 +158,8 @@ std::pair<std::string, int> MySQLConnector::getWithTtl(const std::string& _key) 
 
 bool MySQLConnector::set(const std::string& _key, const std::string& _value) {
     
+	if (!this->con) throw std::runtime_error("Mysql DB undefined");
+
     std::string execQry = "INSERT INTO ? (`key`,`value`) VALUES (?,?) ON DUPLICATE KEY UPDATE value = VALUES(value)";
 
     auto statement = con->create_statement(execQry);
@@ -163,6 +172,8 @@ bool MySQLConnector::set(const std::string& _key, const std::string& _value) {
 
 bool MySQLConnector::setEx(const std::string& _key, int _ttl, const std::string& _value) {
     
+	if (!this->con) throw std::runtime_error("Mysql DB undefined");
+
     std::string execQry = "INSERT INTO ? (`key`,`value`,`ttl`)VALUES(?,?,DATE_ADD(NOW(),INTERVAL ? SECOND)) ON DUPLICATE KEY UPDATE value = VALUES(value), ttl = VALUES(ttl)";
 
     auto statement = con->create_statement(execQry);
@@ -175,6 +186,8 @@ bool MySQLConnector::setEx(const std::string& _key, int _ttl, const std::string&
 
 bool MySQLConnector::expire(const std::string& _key, int _ttl) {
     
+	if (!this->con) throw std::runtime_error("Mysql DB undefined");
+
     std::string execQry = "UPDATE ? SET `ttl`=DATE_ADD(NOW(),INTERVAL ? SECOND)) WHERE `key`=?";
 
     auto statement = con->create_statement(execQry);
@@ -186,6 +199,8 @@ bool MySQLConnector::expire(const std::string& _key, int _ttl) {
 
 bool MySQLConnector::exists(const std::string& _key) {
     
+	if (!this->con) throw std::runtime_error("Mysql DB undefined");
+
     std::string execQry = "SELECT `value` FROM ? WHERE `key`=? AND (`ttl` IS NULL OR `ttl` > CURRENT_TIMESTAMP())";
 
     auto statement = con->create_statement(execQry);
@@ -203,6 +218,8 @@ bool MySQLConnector::exists(const std::string& _key) {
 
 bool MySQLConnector::del(const std::string& _key) {
     
+	if (!this->con) throw std::runtime_error("Mysql DB undefined");
+
     std::string execQry = "DELETE FROM ? WHERE `key`=?";
 
     auto statement = con->create_statement(execQry);
@@ -214,14 +231,18 @@ bool MySQLConnector::del(const std::string& _key) {
 
 std::string MySQLConnector::ping() {
     
+	if (!this->con) "false";
+
     return std::to_string(con->connected());
 
 }
 
 int MySQLConnector::ttl(const std::string& _key) {
+
+	if (!this->con) throw std::runtime_error("Mysql DB undefined");
     
     std::string execQry = "SELECT UNIX_TIMESTAMP(`ttl`), UNIX_TIMESTAMP(CURRENT_TIMESTAMP()) FROM ? WHERE `key`=? AND (`ttl` IS NULL OR `ttl` > CURRENT_TIMESTAMP())";
-
+	
     auto statement = con->create_statement(execQry);
     statement->set_string(0, this->defaultKeyValTableName);
     statement->set_string(1, _key);

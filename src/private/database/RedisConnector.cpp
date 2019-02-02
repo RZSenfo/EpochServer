@@ -1,272 +1,109 @@
 #include <database/RedisConnector.hpp>
 
-#include <main.hpp>
 #include <sstream>
 
 
 RedisConnector::RedisConnector(const DBConfig& Config) {
     this->config = config;
 
-    this->_reconnect(false);
+	
+	try {
+
+		this->client = std::make_shared<cpp_redis::client>();
+		this->client->connect(config.ip, config.port);
+
+		if (!this->client->is_connected()) {
+			throw std::runtime_error("Redis client could not connect");
+		}
+
+		auto resp = this->client->auth(config.password);
+		this->client->sync_commit();
+
+		auto result = resp.get();
+		if (result.is_error()) {
+			throw std::runtime_error("Redis client could not connect. Wrong credentials");
+		}
+	}
+	catch (cpp_redis::redis_error& e) {
+		throw std::runtime_error(std::string("Error creating the redis connector: ") + e.what() );
+	}
 }
 
 RedisConnector::~RedisConnector() {
     
 }
 
-/*
-std::string RedisConnector::execute(const char *format, ...) {
-    this->_reconnect(0);
-
-    va_list ap;
-    EpochlibDBExecute returnObj;
-    redisReply *reply = NULL;
-
-    while (reply == NULL) {
-        // Lock, execute, unlock
-        this->contextMutex.lock();
-        va_start(ap, format);
-        reply = (redisReply *)redisvCommand(this->context, format, ap);
-        va_end(ap);
-        this->contextMutex.unlock();
-
-        if (reply->type == REDIS_REPLY_ERROR) {
-            returnObj.success = false;
-            returnObj.message = reply->str;
-            INFO("[Redis] Error command " + std::string(reply->str));
-        }
-        else {
-
-            if (reply->type == REDIS_REPLY_STRING) {
-                returnObj.success = reply->str != NULL;
-                returnObj.message = reply->str;
-            }
-            else if (reply->type == REDIS_REPLY_INTEGER) {
-                returnObj.success = true;
-                std::stringstream IntToString;
-                IntToString << reply->integer;
-                returnObj.message = IntToString.str();
-            }
-        }
-    }
-
-    freeReplyObject(reply);
-
-    return returnObj;
-}
-*/
-
-void RedisConnector::_reconnect(bool _force) {
-    // Security context lock
-    /*
-    this->contextMutex.lock();
-
-    if (this->context == NULL || _force) {
-        int retries = 0;
-        struct timeval timeout { 1, 50000 };
-
-        do {
-            if (this->context != NULL) {
-                redisFree(this->context);
-            }
-
-            this->context = redisConnectWithTimeout(this->config.ip.c_str(), this->config.port, timeout);
-
-            if (this->context->err) {
-                INFO("[Redis] " + std::string(this->context->errstr));
-            }
-
-            retries++;
-        } while (this->context == NULL || (this->context->err & (REDIS_ERR_IO || REDIS_ERR_EOF) && retries < REDISCONNECTOR_MAXCONNECTION_RETRIES));
-
-        // Too many retries -> exit server with log
-        if (retries == REDISCONNECTOR_MAXCONNECTION_RETRIES) {
-            INFO("[Redis] Server not reachable");
-            exit(1);
-        }
-
-        // Password given -> AUTH
-        if (!this->config.password.empty()) {
-            redisReply *authReply = NULL;
-
-            while (authReply == NULL) {
-                authReply = (redisReply *)redisCommand(this->context, "AUTH %s", this->config.password.c_str());
-            }
-            if (authReply->type == REDIS_REPLY_STRING) {
-                if (strcmp(authReply->str, "OK") == 0) {
-                    INFO("[Redis] Could not authenticate: " + std::string(authReply->str));
-                }
-            }
-
-            freeReplyObject(authReply);
-        }
-
-        // Database index given -> change database
-        int dbIndex = 1;//std::stoi(this->config.dbIndex);
-        if (dbIndex > 0) {
-            redisReply *selectReply = NULL;
-
-            while (selectReply == NULL) {
-                selectReply = (redisReply *)redisCommand(this->context, "SELECT %d", dbIndex);
-            }
-            if (selectReply->type == REDIS_REPLY_STRING) {
-                if (strcmp(selectReply->str, "OK") == 0) {
-                    INFO("[Redis] Could not change database: " + std::string(selectReply->str));
-                }
-            }
-
-            freeReplyObject(selectReply);
-        }
-    }
-
-    // Unlock
-    this->contextMutex.unlock();
-    */
+#define EXEC_COMMAND(command, default_return, result_op) try {\
+if (!this->client->is_connected()) {\
+	throw std::runtime_error("Redis client could not connect");\
+}\
+auto resp = this->client->command;\
+this->client->sync_commit();\
+auto result = resp.get();\
+if (result.is_error() || result.is_null()) {\
+	return default_return;\
+}\
+return result_op;\
+}\
+catch (cpp_redis::redis_error& e) {\
+	return default_return;\
 }
 
-std::string RedisConnector::getRange(const std::string& _key, unsigned int from, unsigned int to) {
-    return this->execute("GETRANGE %s %s %s", _key.c_str(), std::to_string(from).c_str(), std::to_string(to).c_str());
-    /*
-    if (value.success == 1) {
-        
-        SQF returnSqf;
-        returnSqf.push_number(SQF_RETURN_STATUS::SUCCESS);
-        if (value.message.empty()) {
-            returnSqf.push_empty_str();
-        } else if(value.message[0] == '[') {
-            returnSqf.push_array(value.message);
-        }
-        else {
-            returnSqf.push_str(value.message);
-        }
-        return returnSqf.toArray();
-    }
-    else {
-        return SQF::RET_FAIL();
-    }
-    */
-}
-
-std::string RedisConnector::get(const std::string& _key) {
-
-
-    auto temp = this->execute("GET %s", _key.c_str());
-    return temp;
-
-    /*
-    // GET success proceed
-    if (temp.success == 1) {
-        
-        SQF returnSqf;
-        returnSqf.push_number(SQF_RETURN_STATUS::SUCCESS); // single row
-
-        if (temp.message.empty()) {
-            returnSqf.push_empty_str();
-        } else if (temp.message[0] == '[') {
-            returnSqf.push_array(temp.message.c_str());
-        }
-        else {
-            returnSqf.push_str(temp.message.c_str(), 0);
-        }
-
-        return returnSqf.toArray();
-    }
-    else {
-        return SQF::RET_FAIL();
-    }
-    */
+std::string RedisConnector::get(const std::string& key) {
+	
+	EXEC_COMMAND(get(key), "", result.as_string())
 
 }
 
-int RedisConnector::getWithTtl(const std::string& _key) {
+std::string RedisConnector::getRange(const std::string& key, unsigned int from, unsigned int to) {
+	
+	EXEC_COMMAND(getrange(key, from, to), "", result.as_string())
 
-    // No temp GET found -> GET new one
-    auto temp = this->execute("GET %s", _key.c_str());
-    return std::stoi(temp);
-    /*
-    if (temp.success == 1) {
-
-        SQF returnSqf;
-        EpochlibDBExecute ttl = this->execute("TTL %s", _key.c_str());
-
-        size_t messageSize = 0;
-
-        returnSqf.push_number(SQF_RETURN_STATUS::SUCCESS); // single row
-
-
-        if (ttl.success == 1) {
-            returnSqf.push_number(std::atol(ttl.message.c_str()));
-        }
-        else {
-            returnSqf.push_number(-1);
-        }
-        
-        if (!temp.message.empty() && temp.message[0] == '[') {
-            returnSqf.push_array(temp.message.c_str());
-        }
-        else {
-            returnSqf.push_str(temp.message.c_str(), 0);
-        }
-
-        return returnSqf.toArray();
-    }
-    else {
-        return SQF::RET_FAIL();
-    }
-    */
-    
 }
 
-bool RedisConnector::set(const std::string& _key, const std::string& _value) {
-    // _value not used atm    
-    return this->_DBExecToSQF(this->execute("SET %s %s", _key.c_str(), _value.c_str()), SQF_RETURN_TYPE::NOTHING) != "";
-    
+std::pair<std::string, int> RedisConnector::getWithTtl(const std::string& key) {
+	return { this->get(key), this->ttl(key) };
 }
 
-bool RedisConnector::setEx(const std::string& _key, int _ttl, const std::string& _value) {
-    return this->_DBExecToSQF(this->execute("SETEX %s %s %s", _key.c_str(), std::to_string(_ttl).c_str(), _value.c_str()), SQF_RETURN_TYPE::NOTHING) != "";
+bool RedisConnector::set(const std::string& key, const std::string& value) {
+	
+	EXEC_COMMAND(set(key, value), false, true)
+
 }
 
-bool RedisConnector::expire(const std::string& _key, int _ttl) {
-    return this->_DBExecToSQF(this->execute("EXPIRE %s %s", _key.c_str(), std::to_string(_ttl).c_str()), SQF_RETURN_TYPE::NOTHING) != "";
+bool RedisConnector::setEx(const std::string& key, int ttl, const std::string& value) {
+	
+	EXEC_COMMAND(setex(key, ttl, value), false, true)
+
 }
 
-bool RedisConnector::exists(const std::string& _key) {
-    return this->_DBExecToSQF(this->execute("EXISTS %s", _key.c_str()), SQF_RETURN_TYPE::STRING) != "";
+bool RedisConnector::expire(const std::string& key, int ttl) {
+
+	EXEC_COMMAND(expire(key, ttl), false, result.as_integer())
+
 }
 
-bool RedisConnector::del(const std::string& _key) {
-    return this->_DBExecToSQF(this->execute("DEL %s", _key.c_str()), SQF_RETURN_TYPE::NOTHING) != "";
+bool RedisConnector::exists(const std::string& key) {
+	
+	EXEC_COMMAND(exists({ key }), false, result.as_integer())
+
+}
+
+bool RedisConnector::del(const std::string& key) {
+	
+	EXEC_COMMAND(del({ key }), false, result.as_integer())
+
 }
 
 std::string RedisConnector::ping() {
-    return this->_DBExecToSQF(this->execute("PING"), SQF_RETURN_TYPE::NOTHING);
+	
+	EXEC_COMMAND(ping("true"), "false", result.as_string())
+
 }
 
 
-int RedisConnector::ttl(const std::string& _key) {
-    return std::stoi(this->_DBExecToSQF(this->execute("TTL %s", _key.c_str()), SQF_RETURN_TYPE::STRING));
+int RedisConnector::ttl(const std::string& key) {
+
+	EXEC_COMMAND(ttl(key), -1, std::max((int)result.as_integer(), -1))
+
 }
-
-/*
-std::string RedisConnector::lpopWithPrefix(const std::string& _prefix, const std::string& _key) {
-    return this->_DBExecToSQF(this->execute("LPOP %s%s", _prefix.c_str(), _key.c_str()), SQF_RETURN_TYPE::STRING);
-}
-
-std::string RedisConnector::log(const std::string& _key, const std::string& _value) {
-    char formatedTime[64];
-    time_t t = time(0);
-    struct tm * currentTime = localtime(&t);
-
-    strftime(formatedTime, 64, "%Y-%m-%d %H:%M:%S ", currentTime);
-
-    this->execute("LPUSH %s-LOG %s%s", _key.c_str(), formatedTime, _value.c_str());
-
-    return this->_DBExecToSQF(this->execute("LTRIM %s-LOG 0 %d", _key.c_str(), this->config.logLimit), SQF_RETURN_TYPE::NOTHING).toArray();
-}
-
-
-std::string RedisConnector::increaseBancount() {
-    return this->_DBExecToSQF(this->execute("INCR %s", "ahb-cnt"), SQF_RETURN_TYPE::STRING).toArray();
-}
-*/

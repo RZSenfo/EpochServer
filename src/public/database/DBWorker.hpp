@@ -124,7 +124,7 @@ private:
                 }
                 if (!code.is_nil() && code.type_enum() == intercept::types::GameDataType::CODE) {
                     intercept::sqf::call(code, auto_array<game_value>({
-                        game_value(result.index() == 0 ? std::get<std::string>(result) : std::to_string(result.index() == 1 ? std::get<bool>(result) : std::get<double>(result))),
+                        game_value(result.index() == 0 ? std::get<std::string>(result) : std::to_string(result.index() == 1 ? std::get<bool>(result) : std::get<float>(result))),
                         statement.callbackArg.has_value() ? statement.callbackArg.value() : game_value()
                     }));
                 }
@@ -285,7 +285,6 @@ private:
         if (!connector) {
             WARNING("Database connector could not be created");
             throw std::runtime_error("Database connector could not be created");
-            return;
         }
 
         this->dbConnectors[newID].second = connector;

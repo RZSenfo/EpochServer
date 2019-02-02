@@ -626,7 +626,7 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
                         SET_RESULT(0, std::to_string(std::get<bool>(res)));
                     }
                     else {
-                        SET_RESULT(0, std::to_string(std::get<double>(res)));
+                        SET_RESULT(0, std::to_string(std::get<float>(res)));
                     }
                 }
                 else {

@@ -1,6 +1,10 @@
 #ifndef __REDISCONNECTOR_H__
 #define __REDISCONNECTOR_H__
 
+#include <cpp_redis/core/client.hpp>
+#include <cpp_redis/core/types.hpp>
+#include <cpp_redis/misc/error.hpp>
+
 #include <database/DBConnector.hpp>
 #include <main.hpp>
 
@@ -9,18 +13,11 @@ class RedisConnector : public DBConnector {
 private:
     DBConfig config;
     
-
-    
-    // place holder
-    std::string _DBExecToSQF(const std::string& x, SQF_RETURN_TYPE y);
-    std::string execute(const std::string& x);
-    std::string execute(const std::string& x, const std::string& y);
-    std::string execute(const std::string& x, const std::string& y, const std::string& z);
-    std::string execute(const std::string& x, const std::string& y, const std::string& z, const std::string& a);
-
 public:
     RedisConnector(const DBConfig& Config);
     ~RedisConnector();
+
+	std::shared_ptr<cpp_redis::client> client;
 
     /*
     *  DB GET

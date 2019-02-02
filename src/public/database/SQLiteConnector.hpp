@@ -8,23 +8,24 @@
 #include <database/DBConnector.hpp>
 #include <main.hpp>
 
-namespace SQLiteConnector_Detail {
+namespace SQLiteCon_Detail {
 
-    typedef std::shared_ptr< SQLiteDBHolder > db_holder_ref;
-    typedef std::shared_ptr< SQLite::Database > db_ref;
     
+    typedef std::shared_ptr< SQLite::Database > DbRef;
     class SQLiteDBHolder {
     public:
         std::mutex SQLiteDBMutex;
-        db_ref SQLiteDB;
+        DbRef SQLiteDB;
         SQLiteDBHolder() {};
         ~SQLiteDBHolder() {
-            // TODO
+            // TODO check if cleanup is needed
+			// i.e. db close, save/commit
         }
     };
+    typedef std::shared_ptr< SQLiteDBHolder > DbHolderRef;
 
-    static std::map< std::string, db_holder_ref > db_holder_refs = {};
-    static std::mutex db_holder_refs_mutex;
+    static std::map< std::string, DbHolderRef > dbHolderRefs = {};
+    static std::mutex dbHolderRefsMutex;
 
 };
 
@@ -34,6 +35,8 @@ private:
     DBConfig config;
     std::string defaultKeyValTableName = "KeyValueTable";
     bool extendedLogging = false;
+
+	SQLiteCon_Detail::DbHolderRef holderRef = nullptr;
 
 public:
 
