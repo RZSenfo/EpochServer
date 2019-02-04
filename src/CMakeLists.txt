@@ -94,42 +94,18 @@ ADD_LIBRARY( ${INTERCEPT_PLUGIN_NAME} SHARED
 
 ##############################################################################
 ##
-## specify hiredis location
+## platform dependent adjustments
 ##
 ##############################################################################
 if(WIN32)
     # Windows
     SET( INTERCEPT_PLUGIN_LIBS  )
-    if(USE_64BIT_BUILD)
-        TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME} 
-            debug "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x64/Debug/hiredis.lib"
-            debug "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x64/Debug/win32_interop.lib"
-            optimized "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x64/Release/hiredis.lib"
-            optimized "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x64/Release/win32_interop.lib"
-        )
-        # LINK_DIRECTORIES( "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x64/Release" )
-    else()
-        TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME}
-            debug "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x86/Debug/hiredis.lib"
-            debug "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x86/Debug/win32_interop.lib"
-            optimized "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x86/Release/hiredis.lib"
-            optimized "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x86/Release/win32_interop.lib"
-        )
-        # LINK_DIRECTORIES( "${PROJECT_SOURCE_DIR}/deps/hiredis/msvs/vs-solutions/vs2015/bin/x86/Release" )
-    endif()
-    INCLUDE_DIRECTORIES( "${PROJECT_SOURCE_DIR}/deps/hiredis" )
-
     TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME} ws2_32 shlwapi )
     ADD_DEFINITIONS( -DUNICODE -D_UNICODE -DWIN32_LEAN_AND_MEAN )
     SET_TARGET_PROPERTIES( ${INTERCEPT_PLUGIN_NAME} PROPERTIES LINK_FLAGS " /MANIFEST:NO /ERRORREPORT:NONE" )
 else()
     # Linux
-    INCLUDE_DIRECTORIES( "${PROJECT_SOURCE_DIR}/deps/hiredis-linux" )
-    
-    # built by cmake root file
-    LINK_DIRECTORIES( "${PROJECT_SOURCE_DIR}/deps/hiredis-linux" )
-
-    TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME} -Wl,-Bstatic hiredis -Wl,-Bdynamic )
+    TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME} -Wl )
     SET( CMAKE_CXX_FLAGS "-static-libstdc++ -static-libgcc ${CMAKE_CXX_FLAGS}" )
 endif()
 

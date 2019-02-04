@@ -111,7 +111,7 @@ std::string MySQLConnector::get(const std::string& _key) {
     statement->set_string(1, _key);
 
     auto res = statement->query();
-    if (!res || res->error_no != 0 || res->row_count == 0) {
+    if (!res || res->error_no() != 0 || res->row_count() == 0) {
         if (extendedLogging) WARNING("Call failed: " + (res ? res->error() : "empty result"));
         return "";
     }
@@ -146,7 +146,7 @@ std::pair<std::string, int> MySQLConnector::getWithTtl(const std::string& _key) 
     statement->set_string(0, this->defaultKeyValTableName);
     statement->set_string(1, _key);
     auto res = statement->query();
-    if (!res || res->error_no != 0 || res->row_count == 0) {
+    if (!res || res->error_no() != 0 || res->row_count() == 0) {
         if (extendedLogging) WARNING("Call failed: " + (res ? res->error() : "empty result"));
         return { "", 0 };
     }
@@ -207,7 +207,7 @@ bool MySQLConnector::exists(const std::string& _key) {
     statement->set_string(0, this->defaultKeyValTableName);
     statement->set_string(1, _key);
     auto res = statement->query();
-    if (!res || res->error_no != 0 || res->row_count == 0) {
+    if (!res || res->error_no() != 0 || res->row_count() == 0) {
         return false;
     }
     else {
@@ -247,7 +247,7 @@ int MySQLConnector::ttl(const std::string& _key) {
     statement->set_string(0, this->defaultKeyValTableName);
     statement->set_string(1, _key);
     auto res = statement->query();
-    if (!res || res->error_no != 0 || res->row_count == 0) {
+    if (!res || res->error_no() != 0 || res->row_count() == 0) {
         if (extendedLogging) WARNING("Call failed: " + (res ? res->error() : "empty result"));
         return -1;
     }

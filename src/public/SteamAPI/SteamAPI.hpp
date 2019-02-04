@@ -2,6 +2,7 @@
 #define __STEAMAPI_H__
 
 #include <string>
+#include <vector>
 
 // https://wiki.teamfortress.com/wiki/WebAPI/GetPlayerSummaries
 struct SteamPlayerSummary {

@@ -612,7 +612,7 @@ void RCON::add_ban(const std::string& uid) {
 void RCON::add_ban(const std::string& uid, const std::string& reason, int duration) {
     
     Packet rcon_packet;
-    rcon_packet.command = "addBan " + uid + " " + std::to_string(duration) + (reason.empty ? "" : (" " + reason));
+    rcon_packet.command = "addBan " + uid + " " + std::to_string(duration) + (reason.empty() ? "" : (" " + reason));
     remove_null_terminator(rcon_packet.command);
     rcon_packet.type = RCON::message_type::SERVER;
 
