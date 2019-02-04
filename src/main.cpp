@@ -27,6 +27,12 @@ extern "C" {
 
 static std::unique_ptr<EpochServer> server;
 
+std::unique_ptr<ThreadPool> threadpool;
+
+namespace logging {
+    std::shared_ptr<spdlog::logger> logfile;
+}
+
 /*
     RVExtension (Extension main call)
 */
