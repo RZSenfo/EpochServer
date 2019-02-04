@@ -546,7 +546,7 @@ std::shared_ptr<DBWorker> EpochServer::__getDbWorker(const std::string& name) {
             return x.second;
         }
     }
-    return nullptr;
+	throw std::runtime_error("No worker found for name: " + name);
 }
 
 #define SET_RESULT(x,y) outCode = x; out = y;
@@ -557,266 +557,241 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
     std::string out;
     int outCode = 0;
 
-    if (!strncmp(function, "be", 2)) {
-        if (!strcmp(function, "beBroadcastMessage")) {
-            //(const std::string& message);
-            if (argsCnt > 0) {
-                threadpool->enqueue([this, x = std::string(args[0])]() {
-                    this->beBroadcastMessage(x);
-                });
-            }
-            else {
-                SET_RESULT(1, "missing params");
-            }
-        }
-        else if (!strcmp(function, "beKick")) {
-            //(const std::string& playerGUID);
-            if (argsCnt > 0) {
-                threadpool->enqueue([this, x = std::string(args[0])]() {
-                    this->beKick(x);
-                });
-            }
-            else {
-                SET_RESULT(1, "missing params");
-            }
-        }
-        else if (!strcmp(function, "beBan")) {
-            // (const std::string& playerGUID, const std::string& message, int duration);
-            if (argsCnt > 2) {
-                threadpool->enqueue([this, uid = std::string(args[0]), msg = std::string(args[1]), dur = std::string(args[2])]() {
-                    this->beBan(uid, msg, std::stoi(dur));
-                });
-            }
-            else {
-                SET_RESULT(1, "missing params");
-            }
-        }
-        else if (!strcmp(function, "beShutdown")) {
-            this->beShutdown();
-        }
-        else if (!strcmp(function, "beLock")) {
-            threadpool->enqueue([this]() {
-                this->beLock();
-            });
-        }
-        else if (!strcmp(function, "beUnlock")) {
-            threadpool->enqueue([this]() {
-                this->beUnlock();
-            });
-        }
-        else {
-            SET_RESULT(1, "Unknown be command");
-        }
-    }
-    else if (!strncmp(function, "db", 2)) {
-        // skip prefix
-        function += 2;
+	try {
+		if (!strncmp(function, "be", 2)) {
+			if (!strcmp(function, "beBroadcastMessage")) {
+				//(const std::string& message);
+				if (argsCnt < 1) throw std::runtime_error("Missing message param for beBroadcastMessage");
+				threadpool->enqueue([this, x = std::string(args[0])]() {
+					this->beBroadcastMessage(x);
+				});
+			}
+			else if (!strcmp(function, "beKick")) {
+				//(const std::string& playerGUID);
+				if (argsCnt < 1) throw std::runtime_error("Missing guid param in beKick");
+				threadpool->enqueue([this, x = std::string(args[0])]() {
+					this->beKick(x);
+				});
+			}
+			else if (!strcmp(function, "beBan")) {
+				// (const std::string& playerGUID, const std::string& message, int duration);
+				if (argsCnt < 1) throw std::runtime_error("Missing params for beBan");
+				std::string msg = argsCnt > 1 ? args[1] : "BE Ban";
+				if (msg.empty()) msg = "BE Ban";
+				int dur = -1;
+				if (argsCnt > 2) {
+					try {
+						dur = std::stoi(args[2]);
+					}
+					catch (...) {
+						WARNING(static_cast<std::string>("Could not parse banDuration, fallback to permaban. GUID: ") + args[0]);
+					}
+				}
+				threadpool->enqueue([this, uid = std::string(args[0]), msg = std::move(msg), dur]() {
+					this->beBan(uid, msg, dur);
+				});
+			}
+			else if (!strcmp(function, "beShutdown")) {
+				this->beShutdown();
+			}
+			else if (!strcmp(function, "beLock")) {
+				threadpool->enqueue([this]() {
+					this->beLock();
+				});
+			}
+			else if (!strcmp(function, "beUnlock")) {
+				threadpool->enqueue([this]() {
+					this->beUnlock();
+				});
+			}
+			else {
+				SET_RESULT(1, "Unknown be command");
+			}
+		}
+		else if (!strncmp(function, "db", 2)) {
+			// skip prefix TODO test encoding.. might need to skipp more bytes
+			function += 2;
 
-        if (!strcmp(function, "Poll")) {
-            if (argsCnt > 1) {
-                auto &worker = this->__getDbWorker(args[0]);
+			if (!strcmp(function, "Poll")) {
+				if (argsCnt < 2 || strlen(args[0]) == 0 || strlen(args[1]) == 0)
+					throw std::runtime_error("Invalid args for dbPoll");
+				
+				auto &worker = this->__getDbWorker(args[0]);
 
-                unsigned long id = std::stoul(args[0]);
-                if (worker->isResultReady(id)) {
-                    auto res = worker->popResult(id);
-                    if (res.index() == 0) {
-                        SET_RESULT(0, std::get<std::string>(res));
-                    }
-                    else if (res.index() == 1) {
-                        SET_RESULT(0, std::to_string(std::get<bool>(res)));
-                    }
-                    else {
-                        SET_RESULT(0, std::to_string(std::get<float>(res)));
-                    }
-                }
-                else {
-                    SET_RESULT(1, "result unknown or not ready");
-                }
-            }
-            else {
-                SET_RESULT(1, "id missing for db poll");
-            }
-        }
-        else if (!strcmp(function, "Get")) {
-            if (argsCnt > 1) {
-                auto &worker = this->__getDbWorker(args[0]);
+				if (!worker) throw std::runtime_error(static_cast<std::string>("Database connection not found: ") + args[0]);
 
-                DBStatementOptions opts;
-                opts.type = DBExecutionType::ASYNC_POLL;
+				unsigned long id;
+				try {
+					id = std::stoul(args[1]);
+				}
+				catch (...) {
+					throw std::runtime_error("Could not parse request id");
+				}
+				if (worker->isResultReady(id)) {
+					try {
+						auto res = worker->popResult(id);
+						if (res.index() == 0) {
+							SET_RESULT(0, std::get<std::string>(res));
+						}
+						else if (res.index() == 1) {
+							SET_RESULT(0, std::to_string(std::get<bool>(res)));
+						}
+						else {
+							SET_RESULT(0, std::to_string(std::get<int>(res)));
+						}
+					}
+					catch (std::out_of_range& e) {
+						throw std::runtime_error("Request id unknown");
+					}
+					catch (std::exception& ex) {
+						outCode = 3;
+						throw std::runtime_error(std::string("Error occured for request: ") + ex.what());
+					}
+				}
+				else {
+					SET_RESULT(2, "Result not ready");
+				}
+			}
+			else if (!strcmp(function, "Get")) {
+				if (argsCnt < 2) throw std::runtime_error("Not enough args given for get");
+				auto &worker = this->__getDbWorker(args[0]);
 
-                unsigned long id;
-                worker->get(opts, args[1], id);
-                SET_RESULT(0, std::to_string(id));
-            }
-            else {
-                SET_RESULT(1, "not enough args for db call");
-            }
-        }
-        else if (!strcmp(function, "Exists")) {
-            if (argsCnt > 1) {
-                auto &worker = this->__getDbWorker(args[0]);
+				unsigned long id = worker->get<DBExecutionType::ASYNC_POLL>(args[1]);
+				SET_RESULT(0, std::to_string(id));
+				
+			}
+			else if (!strcmp(function, "Exists")) {
+				if (argsCnt < 2) throw std::runtime_error("Not enough args given for exists");
+				auto &worker = this->__getDbWorker(args[0]);
 
-                DBStatementOptions opts;
-                opts.type = DBExecutionType::ASYNC_POLL;
+				unsigned long id = worker->exists<DBExecutionType::ASYNC_POLL>(args[1]);
+				SET_RESULT(0, std::to_string(id));
+			}
+			else if (!strcmp(function, "Set")) {
+				if (argsCnt < 3) throw std::runtime_error("Not enough args given for set");
+				auto &worker = this->__getDbWorker(args[0]);
 
-                unsigned long id;
-                worker->exists(opts, args[1], id);
-                SET_RESULT(0, std::to_string(id));
-            }
-            else {
-                SET_RESULT(1, "not enough args for db call");
-            }
-        }
-        else if (!strcmp(function, "Set")) {
-            if (argsCnt > 2) {
-                auto &worker = this->__getDbWorker(args[0]);
+				unsigned long id = worker->set<DBExecutionType::ASYNC_POLL>(args[1], args[2]);
+				SET_RESULT(0, std::to_string(id));
+			}
+			else if (!strcmp(function, "SetEx")) {
+				if (argsCnt < 4) throw std::runtime_error("Not enough args given for setEx");
+				auto &worker = this->__getDbWorker(args[0]);
 
-                DBStatementOptions opts;
-                opts.type = DBExecutionType::ASYNC_POLL;
+				int ttl;
+				try {
+					ttl = std::stoi(args[2]);
+				}
+				catch (std::exception& e) {
+					throw std::runtime_error("Error parsing ttl for setEx");
+				}
 
-                unsigned long id;
-                worker->set(opts, args[1], args[2], id);
-                SET_RESULT(0, std::to_string(id));
-            }
-            else {
-                SET_RESULT(1, "not enough args for db call");
-            }
-        }
-        else if (!strcmp(function, "SetEx")) {
-            if (argsCnt > 3) {
-                auto &worker = this->__getDbWorker(args[0]);
+				unsigned long id = worker->setEx<DBExecutionType::ASYNC_POLL>(args[1], ttl, args[3]);
+				SET_RESULT(0, std::to_string(id));
+			}
+			else if (!strcmp(function, "Expire")) {
+				if (argsCnt < 2) throw std::runtime_error("Not enough args given for expire");
+				auto &worker = this->__getDbWorker(args[0]);
 
-                DBStatementOptions opts;
-                opts.type = DBExecutionType::ASYNC_POLL;
+				int ttl;
+				try {
+					ttl = std::stoi(args[2]);
+				}
+				catch (std::exception& e) {
+					throw std::runtime_error("Error parsing ttl for expire");
+				}
 
-                unsigned long id;
-                worker->setEx(opts, args[1], std::stoi(args[2]), args[3], id);
-                SET_RESULT(0, std::to_string(id));
-            }
-            else {
-                SET_RESULT(1, "not enough args for db call");
-            }
-        }
-        else if (!strcmp(function, "Expire")) {
-            if (argsCnt > 2) {
-                auto &worker = this->__getDbWorker(args[0]);
+				unsigned long id = worker->expire<DBExecutionType::ASYNC_POLL>(args[1], ttl);
+				SET_RESULT(0, std::to_string(id));
+			}
+			else if (!strcmp(function, "Del")) {
+				if (argsCnt < 2) throw std::runtime_error("Not enough args given for del");
+				auto &worker = this->__getDbWorker(args[0]);
 
-                DBStatementOptions opts;
-                opts.type = DBExecutionType::ASYNC_POLL;
+				unsigned long id = worker->del<DBExecutionType::ASYNC_POLL>(args[1]);
+				SET_RESULT(0, std::to_string(id));
+			}
+			else if (!strcmp(function, "Query")) {
+				// TODO
+				SET_RESULT(1, "TODO");
+			}
+			else if (!strcmp(function, "GetRange")) {
+				if (argsCnt < 4) throw std::runtime_error("Not enough args given for getRange");
+				auto &worker = this->__getDbWorker(args[0]);
 
-                unsigned long id;
-                worker->expire(opts, args[1], std::stoi(args[2]), id);
-                SET_RESULT(0, std::to_string(id));
-            }
-            else {
-                SET_RESULT(1, "not enough args for db call");
-            }
-        }
-        else if (!strcmp(function, "Del")) {
-            if (argsCnt > 1) {
-                auto &worker = this->__getDbWorker(args[0]);
+				unsigned long from, to;
+				try {
+					from = std::stoul(args[2]);
+					to = std::stoul(args[3]);
+				}
+				catch (std::exception& e) {
+					throw std::runtime_error("Error parsing indizes for getRange");
+				}
 
-                DBStatementOptions opts;
-                opts.type = DBExecutionType::ASYNC_POLL;
+				unsigned long id = worker->getRange<DBExecutionType::ASYNC_POLL>(args[1], from, to);
+				SET_RESULT(0, std::to_string(id));
+			}
+			else if (!strcmp(function, "GetTtl")) {
+				if (argsCnt < 2) throw std::runtime_error("Not enough args given for getTtl");
+				auto &worker = this->__getDbWorker(args[0]);
 
-                unsigned long id;
-                worker->del(opts, args[1], id);
-                SET_RESULT(0, std::to_string(id));
-            }
-            else {
-                SET_RESULT(1, "not enough args for db call");
-            }
-        }
-        else if (!strcmp(function, "Query")) {
-            // TODO
-            SET_RESULT(1, "TODO");
-        }
-        else if (!strcmp(function, "GetRange")) {
-            if (argsCnt > 3) {
-                auto &worker = this->__getDbWorker(args[0]);
+				unsigned long id = worker->getWithTtl<DBExecutionType::ASYNC_POLL>(args[1]);
+				SET_RESULT(0, std::to_string(id));
+			}
+			else if (!strcmp(function, "Ping")) {
+				auto &worker = this->__getDbWorker(args[0]);
 
-                DBStatementOptions opts;
-                opts.type = DBExecutionType::ASYNC_POLL;
+				unsigned long id = worker->ping<DBExecutionType::ASYNC_POLL>();
+				SET_RESULT(0, std::to_string(id));
+			}
+			else {
+				SET_RESULT(1, "Unknown db command");
+			}
+		}
+		else if (!strcmp(function, "log")) {
+			if (argsCnt < 1) throw std::runtime_error("Nothing to log was provided");
+			
+			std::string msg = args[0];
+			for (int i = 1; i < argsCnt; ++i) {
+				msg += "\n";
+				msg += args[i];
+			}
 
-                unsigned long id;
-                worker->getRange(opts, args[1], std::stoul(args[2]), std::stoul(args[3]), id);
-                SET_RESULT(0, std::to_string(id));
-            }
-            else {
-                SET_RESULT(1, "not enough args for db call");
-            }
-        }
-        else if (!strcmp(function, "GetTtl")) {
-            if (argsCnt > 1) {
-                auto &worker = this->__getDbWorker(args[0]);
-
-                DBStatementOptions opts;
-                opts.type = DBExecutionType::ASYNC_POLL;
-
-                unsigned long id;
-                worker->getWithTtl(opts, args[1], id);
-                SET_RESULT(0, std::to_string(id));
-            }
-            else {
-                SET_RESULT(1, "not enough args for db call");
-            }
-        }
-        else if (!strcmp(function, "Ping")) {
-            auto &worker = this->__getDbWorker(args[0]);
-
-            DBStatementOptions opts;
-            opts.type = DBExecutionType::ASYNC_POLL;
-
-            unsigned long id;
-            worker->ping(opts, id);
-            SET_RESULT(0, std::to_string(id));
-        }
-        else {
-            SET_RESULT(1, "Unknown db command");
-        }
-    }
-    else if (!strcmp(function, "log")) {
-        if (argsCnt > 0) {
-            threadpool->enqueue([x = std::string(args[0])]() {
-                INFO(x);
-            });
-        }
-        else {
-            SET_RESULT(1, "missing params");
-        }
-    }
-    else if (!strcmp(function, "playerCheck")) {
-        if (argsCnt > 0) {
-            threadpool->enqueue([this, x = std::string(args[0])]() {
-                this->initPlayerCheck(x);
-            });
-        }
-        else {
-            SET_RESULT(1, "missing params");
-        }
-    }
-    else if (!strcmp(function, "getCurrentTime")) {
-        SET_RESULT(0, this->getCurrentTime());
-    }
-    else if (!strcmp(function, "getRandomString")) {
-        SET_RESULT(0, this->getRandomString());
-    }
-    else if (!strcmp(function, "getStringMd5")) {
-        // string
-        if (argsCnt > 0) {
-            SET_RESULT(0, this->getStringMd5(args[0]));
-        }
-        else {
-            SET_RESULT(1, "missing params");
-        }
-    }
-    else if (!strcmp(function, "version")) {
-        SET_RESULT(1, "0.1.0.0");
-    }
-    else {
-        SET_RESULT(1, "Unknown function");
-    }
+			threadpool->enqueue([x = std::move(msg)]() {
+				INFO(x);
+			});
+		}
+		else if (!strcmp(function, "playerCheck")) {
+			if (argsCnt < 1) throw std::runtime_error("No playerid given to check");
+			if (strlen(args[0]) != 17) throw std::runtime_error("Playerid is not a steam64id. Length mismatch");
+			threadpool->enqueue([this, x = std::move(std::string(args[0]))]() {
+				this->initPlayerCheck(x);
+			});
+		}
+		else if (!strcmp(function, "getCurrentTime")) {
+			SET_RESULT(0, this->getCurrentTime());
+		}
+		else if (!strcmp(function, "getRandomString")) {
+			SET_RESULT(0, this->getRandomString());
+		}
+		else if (!strcmp(function, "getStringMd5")) {
+			// string
+			if (argsCnt < 1) throw std::runtime_error("No string to hash was given");
+			SET_RESULT(0, this->getStringMd5(args[0]));
+		}
+		else if (!strcmp(function, "version")) {
+			SET_RESULT(1, "0.1.0.0");
+		}
+		else {
+			SET_RESULT(1, "Unknown function");
+		}
     
+	}
+	catch (std::exception& e) {
+		outCode = outCode ? outCode : 1;
+		out = static_cast<std::string>("Error occured: ") + e.what();
+	}
+
     strncpy_s(output, outputSize, out.c_str(), _TRUNCATE);
     return outCode;
 }
