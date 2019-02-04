@@ -117,7 +117,6 @@ endif()
 TARGET_LINK_LIBRARIES( ${INTERCEPT_PLUGIN_NAME}
     mariadbclientpp
     yaml-cpp
-    pcre
     SQLiteCpp
 )
 INCLUDE_DIRECTORIES( "${PROJECT_SOURCE_DIR}/deps/spdlog/include" )
