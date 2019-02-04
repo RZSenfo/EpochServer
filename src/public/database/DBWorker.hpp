@@ -405,6 +405,31 @@ public:
         throw std::out_of_range("Unknown id");
     }
 
+    /**
+    *  \brief Tries to remove a result from list and to returns it
+    *
+    *  Removes result from list and returns it if it is possible (known and ready)
+    *  otherwise throws exception
+    *
+    *  \throws std::out_of_range if id is unknown or not ready
+    *  \param id unsigned long request id
+    *  \returns DBReturn
+    **/
+    DBReturn tryPopResult(unsigned long id) {
+        std::unique_lock<std::shared_mutex> lock(this->resultsMutex);
+        for (unsigned int i = 0; i < this->results.size(); i++) {
+            auto& x = this->results[i];
+            if (x.first == id) {
+                if (x.second.valid() && x.second.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+                    this->results.erase(results.begin() + i);
+                    return x.second.get();
+                }
+                throw std::invalid_argument("Result not ready");
+            }
+        }
+        throw std::out_of_range("Unknown id");
+    }
+
 #define CREATE_FUNCTION(fncname, defaultreturn, lambda, ...) \
     template <DBExecutionType T>\
     typename std::enable_if<T == DBExecutionType::ASYNC_FUTURE, std::shared_future<DBReturn> >::type\
@@ -419,7 +444,7 @@ public:
         const std::optional<std::variant<std::function<void(const DBReturn&)>, intercept::types::code> >& fnc,\
         const std::optional<game_value>& args\
     ) {\
-        threadpool->enqueue(\
+        threadpool->fireAndForget(\
             this->getFncWrapper(defaultreturn, lambda, fnc, args)\
         );\
     };\

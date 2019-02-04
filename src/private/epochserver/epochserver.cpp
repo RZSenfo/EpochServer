@@ -562,14 +562,14 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
             if (!strcmp(function, "beBroadcastMessage")) {
                 //(const std::string& message);
                 if (argsCnt < 1) throw std::runtime_error("Missing message param for beBroadcastMessage");
-                threadpool->enqueue([this, x = std::string(args[0])]() {
+                threadpool->fireAndForget([this, x = std::string(args[0])]() {
                     this->beBroadcastMessage(x);
                 });
             }
             else if (!strcmp(function, "beKick")) {
                 //(const std::string& playerGUID);
                 if (argsCnt < 1) throw std::runtime_error("Missing guid param in beKick");
-                threadpool->enqueue([this, x = std::string(args[0])]() {
+                threadpool->fireAndForget([this, x = std::string(args[0])]() {
                     this->beKick(x);
                 });
             }
@@ -587,7 +587,7 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
                         WARNING(static_cast<std::string>("Could not parse banDuration, fallback to permaban. GUID: ") + args[0]);
                     }
                 }
-                threadpool->enqueue([this, uid = std::string(args[0]), msg = std::move(msg), dur]() {
+                threadpool->fireAndForget([this, uid = std::string(args[0]), msg = std::move(msg), dur]() {
                     this->beBan(uid, msg, dur);
                 });
             }
@@ -595,12 +595,12 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
                 this->beShutdown();
             }
             else if (!strcmp(function, "beLock")) {
-                threadpool->enqueue([this]() {
+                threadpool->fireAndForget([this]() {
                     this->beLock();
                 });
             }
             else if (!strcmp(function, "beUnlock")) {
-                threadpool->enqueue([this]() {
+                threadpool->fireAndForget([this]() {
                     this->beUnlock();
                 });
             }
@@ -627,29 +627,29 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
                 catch (...) {
                     throw std::runtime_error("Could not parse request id");
                 }
-                if (worker->isResultReady(id)) {
-                    try {
-                        auto res = worker->popResult(id);
-                        if (res.index() == 0) {
-                            SET_RESULT(0, std::get<std::string>(res));
-                        }
-                        else if (res.index() == 1) {
-                            SET_RESULT(0, std::to_string(std::get<bool>(res)));
-                        }
-                        else {
-                            SET_RESULT(0, std::to_string(std::get<int>(res)));
-                        }
+                
+                try {
+                    auto res = worker->tryPopResult(id);
+                    if (res.index() == 0) {
+                        SET_RESULT(0, std::get<std::string>(res));
                     }
-                    catch (std::out_of_range& e) {
-                        throw std::runtime_error("Request id unknown");
+                    else if (res.index() == 1) {
+                        SET_RESULT(0, std::to_string(std::get<bool>(res)));
                     }
-                    catch (std::exception& ex) {
-                        outCode = 3;
-                        throw std::runtime_error(std::string("Error occured for request: ") + ex.what());
+                    else {
+                        SET_RESULT(0, std::to_string(std::get<int>(res)));
                     }
                 }
-                else {
-                    SET_RESULT(2, "Result not ready");
+                catch (std::invalid_argument& e) {
+                    outCode = 2;
+                    throw std::runtime_error("Request not ready");
+                }
+                catch (std::out_of_range& e) {
+                    throw std::runtime_error("Request id unknown");
+                }
+                catch (std::exception& ex) {
+                    outCode = 3;
+                    throw std::runtime_error(std::string("Error occured for request: ") + ex.what());
                 }
             }
             else if (!strcmp(function, "Get")) {
@@ -757,14 +757,14 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
                 msg += args[i];
             }
 
-            threadpool->enqueue([x = std::move(msg)]() {
+            threadpool->fireAndForget([x = std::move(msg)]() {
                 INFO(x);
             });
         }
         else if (!strcmp(function, "playerCheck")) {
             if (argsCnt < 1) throw std::runtime_error("No playerid given to check");
             if (strlen(args[0]) != 17) throw std::runtime_error("Playerid is not a steam64id. Length mismatch");
-            threadpool->enqueue([this, x = std::move(std::string(args[0]))]() {
+            threadpool->fireAndForget([this, x = std::move(std::string(args[0]))]() {
                 this->initPlayerCheck(x);
             });
         }
