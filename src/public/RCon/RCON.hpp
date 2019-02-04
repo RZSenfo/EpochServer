@@ -49,17 +49,17 @@ enum RconTaskType {
 class RCON {
 
 public:
-	
+    
     RCON(const std::string& host, int port, const std::string& pw, bool delayed);
-	~RCON();
-	
+    ~RCON();
+    
     void start();
 
-	void send_command(const std::string& command);
+    void send_command(const std::string& command);
     void send_global_msg(const std::string& msg);
 
     void remove_ban(const std::string& player_guid);
-	void add_ban(const std::string& player_guid);
+    void add_ban(const std::string& player_guid);
     void add_ban(const std::string& player_guid, const std::string& reason, int duration = -1);
     void kick(const std::string& player_guid);
 
@@ -101,13 +101,13 @@ private:
     };
     
     std::shared_ptr<UDP_Socket> socket;
-	
-	unsigned int port;
-	std::string host;
-	std::string password;
+    
+    unsigned int port;
+    std::string host;
+    std::string password;
 
     void bind();
-	bool loggedin = false;
+    bool loggedin = false;
 
     bool send_heart_beat = true;
     std::chrono::time_point<std::chrono::system_clock> last_heart_beat;
@@ -149,9 +149,9 @@ private:
     bool is_bad_player_string(const std::string& player_name);
     bool is_whitelisted_player(const std::string& player_guid);
     bool is_vpn_whitelisted_player(const std::string& player_guid);
-	
+    
     // Player Name / BEGuid
-	std::unordered_map<std::string, RconPlayerInfo> players;
+    std::unordered_map<std::string, RconPlayerInfo> players;
     std::mutex player_mutex;
 
     /*

@@ -49,7 +49,7 @@ typedef std::shared_ptr<DBConnector> DBConRef;
 enum class DBExecutionType {
     ASYNC_CALLBACK,
     ASYNC_FUTURE,
-	ASYNC_POLL
+    ASYNC_POLL
 };
 
 /**
@@ -113,22 +113,22 @@ private:
       *
       **/
     void callbackResultIfNeeded(
-		const DBReturn& result,
-		const std::optional<std::variant<std::function<void(const DBReturn&)>, intercept::types::code> >& fnc,
-		const std::optional<game_value>& args
-	) {
-		if (!fnc.has_value()) return;
+        const DBReturn& result,
+        const std::optional<std::variant<std::function<void(const DBReturn&)>, intercept::types::code> >& fnc,
+        const std::optional<game_value>& args
+    ) {
+        if (!fnc.has_value()) return;
 
         if (fnc->index() == 1) {
             // arma script code
             intercept::client::invoker_lock lock;
             intercept::sqf::call(
-				std::get<intercept::types::code>(*fnc),
-				auto_array<game_value>({
-					game_value(result.index() == 0 ? std::get<std::string>(result) : std::to_string(result.index() == 1 ? std::get<bool>(result) : std::get<int>(result))),
-					args.has_value() ? *args : game_value()
-				})
-			);
+                std::get<intercept::types::code>(*fnc),
+                auto_array<game_value>({
+                    game_value(result.index() == 0 ? std::get<std::string>(result) : std::to_string(result.index() == 1 ? std::get<bool>(result) : std::get<int>(result))),
+                    args.has_value() ? *args : game_value()
+                })
+            );
         }
         else {
             // lambda function
@@ -243,7 +243,7 @@ private:
       *
       *   \throws std::runtime_exception if all connectors are assigned and anew one is requested
       **/
-	DBConRef getConnector() {
+    DBConRef getConnector() {
         auto tid = std::this_thread::get_id();
         for (auto& x : this->dbConnectors) {
             if (x.first == tid) {
@@ -254,7 +254,7 @@ private:
         if (newID >= this->dbConnectorsCount) {
             throw std::runtime_error("Unexpected amout of threads tried to get database connectors");
         }
-		DBConRef connector;
+        DBConRef connector;
         try {
             switch (dbConfig.dbType) {
             case DBType::MY_SQL: {
@@ -289,36 +289,36 @@ private:
         return connector;
     }
 
-	template<typename E>
-	std::function<DBReturn()> getFncWrapper(E&& errorValue, std::function<DBReturn(const DBConRef& ref)> f) {
-		return [this, errorValue = std::move(errorValue), fnc = std::move(f)](){
-			try {
-				auto& db = this->getConnector();
-				DBReturn result = fnc(db);
-				return result;
-			}
-			catch (std::exception& e) {
-				return static_cast<DBReturn>(errorValue);
-			}
-		};
-	}
+    template<typename E>
+    std::function<DBReturn()> getFncWrapper(E&& errorValue, std::function<DBReturn(const DBConRef& ref)> f) {
+        return [this, errorValue = std::move(errorValue), fnc = std::move(f)](){
+            try {
+                auto& db = this->getConnector();
+                DBReturn result = fnc(db);
+                return result;
+            }
+            catch (std::exception& e) {
+                return static_cast<DBReturn>(errorValue);
+            }
+        };
+    }
 
-	template<typename E>
-	std::function<void()> getFncWrapper(E&& errorValue, std::function<DBReturn(const DBConRef& ref)> f,
-		const std::optional<std::variant<std::function<void(const DBReturn&)>, intercept::types::code> >& fnc,
-		const std::optional<game_value>& args
-	) {
-		return [this, errorValue = std::move(errorValue), fnc = std::move(f)
-				fnc = std::move(fnc), args = std::move(args)
-		](){
-			try {
-				auto& db = this->getConnector();
-				DBReturn result = fnc(db);
-				this->callbackResultIfNeeded(result, callback, args);
-			}
-			catch (std::exception& e) {}
-		};
-	}
+    template<typename E>
+    std::function<void()> getFncWrapper(E&& errorValue, std::function<DBReturn(const DBConRef& ref)> f,
+        const std::optional<std::variant<std::function<void(const DBReturn&)>, intercept::types::code> >& fnc,
+        const std::optional<game_value>& args
+    ) {
+        return [this, errorValue = std::move(errorValue), fnc = std::move(f)
+                fnc = std::move(fnc), args = std::move(args)
+        ](){
+            try {
+                auto& db = this->getConnector();
+                DBReturn result = fnc(db);
+                this->callbackResultIfNeeded(result, callback, args);
+            }
+            catch (std::exception& e) {}
+        };
+    }
 
 public:
 
@@ -406,61 +406,61 @@ public:
     }
 
 #define CREATE_FUNCTION(fncname, defaultreturn, lambda, ...) \
-	template <DBExecutionType T>\
-	typename std::enable_if<T == DBExecutionType::ASYNC_FUTURE, std::shared_future<DBReturn> >::type\
+    template <DBExecutionType T>\
+    typename std::enable_if<T == DBExecutionType::ASYNC_FUTURE, std::shared_future<DBReturn> >::type\
     fncname(__VA_ARGS__) {\
-		return threadpool->enqueue(\
-			this->getFncWrapper(defaultreturn, lambda);\
+        return threadpool->enqueue(\
+            this->getFncWrapper(defaultreturn, lambda);\
         ).share();\
     };\
-	template <DBExecutionType T>\
-	typename std::enable_if<T == DBExecutionType::ASYNC_CALLBACK, void >::type\
-	fncname(__VA_ARGS__,\
-		const std::optional<std::variant<std::function<void(const DBReturn&)>, intercept::types::code> >& fnc,\
-		const std::optional<game_value>& args\
-	) {\
-		threadpool->enqueue(\
-			this->getFncWrapper(defaultreturn, lambda, fnc, args)\
-		);\
-	};\
-	template <DBExecutionType T>\
-	typename std::enable_if<T == DBExecutionType::ASYNC_POLL, unsigned long>::type\
-	fncname(__VA_ARGS__) {\
-		return this->insertFuture(\
-			threadpool->enqueue(\
-				this->getFncWrapper(defaultreturn, lambda)\
-			).share()\
-		);\
-	};
+    template <DBExecutionType T>\
+    typename std::enable_if<T == DBExecutionType::ASYNC_CALLBACK, void >::type\
+    fncname(__VA_ARGS__,\
+        const std::optional<std::variant<std::function<void(const DBReturn&)>, intercept::types::code> >& fnc,\
+        const std::optional<game_value>& args\
+    ) {\
+        threadpool->enqueue(\
+            this->getFncWrapper(defaultreturn, lambda, fnc, args)\
+        );\
+    };\
+    template <DBExecutionType T>\
+    typename std::enable_if<T == DBExecutionType::ASYNC_POLL, unsigned long>::type\
+    fncname(__VA_ARGS__) {\
+        return this->insertFuture(\
+            threadpool->enqueue(\
+                this->getFncWrapper(defaultreturn, lambda)\
+            ).share()\
+        );\
+    };
 
 // TODO find a alternative to __VA_OPT__(,) and merge this into CREATE_FUNCTION
 #define CREATE_FUNCTION_NO_ARGS(fncname, defaultreturn, lambda) \
-	template <DBExecutionType T>\
-	typename std::enable_if<T == DBExecutionType::ASYNC_FUTURE, std::shared_future<DBReturn> >::type\
+    template <DBExecutionType T>\
+    typename std::enable_if<T == DBExecutionType::ASYNC_FUTURE, std::shared_future<DBReturn> >::type\
     fncname() {\
-		return threadpool->enqueue(\
-			this->getFncWrapper(defaultreturn, lambda);\
+        return threadpool->enqueue(\
+            this->getFncWrapper(defaultreturn, lambda);\
         ).share();\
     };\
-	template <DBExecutionType T>\
-	typename std::enable_if<T == DBExecutionType::ASYNC_CALLBACK, void >::type\
-	fncname(\
-		const std::optional<std::variant<std::function<void(const DBReturn&)>, intercept::types::code> >& fnc,\
-		const std::optional<game_value>& args\
-	) {\
-		threadpool->enqueue(\
-			this->getFncWrapper(defaultreturn, lambda, fnc, args)\
-		);\
-	};\
-	template <DBExecutionType T>\
-	typename std::enable_if<T == DBExecutionType::ASYNC_POLL, unsigned long>::type\
-	fncname() {\
-		return this->insertFuture(\
-			threadpool->enqueue(\
-				this->getFncWrapper(defaultreturn, lambda)\
-			).share()\
-		);\
-	};
+    template <DBExecutionType T>\
+    typename std::enable_if<T == DBExecutionType::ASYNC_CALLBACK, void >::type\
+    fncname(\
+        const std::optional<std::variant<std::function<void(const DBReturn&)>, intercept::types::code> >& fnc,\
+        const std::optional<game_value>& args\
+    ) {\
+        threadpool->enqueue(\
+            this->getFncWrapper(defaultreturn, lambda, fnc, args)\
+        );\
+    };\
+    template <DBExecutionType T>\
+    typename std::enable_if<T == DBExecutionType::ASYNC_POLL, unsigned long>::type\
+    fncname() {\
+        return this->insertFuture(\
+            threadpool->enqueue(\
+                this->getFncWrapper(defaultreturn, lambda)\
+            ).share()\
+        );\
+    };
 
 
     /**
@@ -470,9 +470,9 @@ public:
     *  \param key const std::string&
     **/
 
-	CREATE_FUNCTION(get, "", [key = std::move(key)](const DBConRef& ref){ return ref->get(key); }, const std::string& key);
+    CREATE_FUNCTION(get, "", [key = std::move(key)](const DBConRef& ref){ return ref->get(key); }, const std::string& key);
 
-	/**
+    /**
     *  \brief DB GETRANGE  Args are moved!
     *
     *  \param statement const DBStatementOptions&
@@ -481,7 +481,7 @@ public:
     *  \param to unsigned int
     *
     **/
-	CREATE_FUNCTION(getRange, "", ([key = std::move(key), from, to](const DBConRef& ref){ return ref->getRange(key,from,to); }), const std::string& key, unsigned int from, unsigned int to);
+    CREATE_FUNCTION(getRange, "", ([key = std::move(key), from, to](const DBConRef& ref){ return ref->getRange(key,from,to); }), const std::string& key, unsigned int from, unsigned int to);
 
     /**
     *  \brief DB GETTTL  Args are moved!
@@ -489,24 +489,24 @@ public:
     *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     **/
-	CREATE_FUNCTION(getWithTtl, (std::pair<std::string, int>("", -1)), [key = std::move(key)](const DBConRef& ref){ return ref->getWithTtl(key); }, const std::string& key);
-	
+    CREATE_FUNCTION(getWithTtl, (std::pair<std::string, int>("", -1)), [key = std::move(key)](const DBConRef& ref){ return ref->getWithTtl(key); }, const std::string& key);
+    
     /**
     *  \brief DB EXISTS  Args are moved!
     *
     *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     **/
-	CREATE_FUNCTION(exists, false, [key = std::move(key)](const DBConRef& ref){ return ref->exists(key); }, const std::string& key);
+    CREATE_FUNCTION(exists, false, [key = std::move(key)](const DBConRef& ref){ return ref->exists(key); }, const std::string& key);
     
-	/**
+    /**
     *  \brief DB SET  Args are moved!
     *
     *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     *  \param value const std::string&
     **/
-	CREATE_FUNCTION(set, false, ([key = std::move(key), value = std::move(value)](const DBConRef& ref){ return ref->set(key,value); }), const std::string& key, const std::string& value);
+    CREATE_FUNCTION(set, false, ([key = std::move(key), value = std::move(value)](const DBConRef& ref){ return ref->set(key,value); }), const std::string& key, const std::string& value);
     
     /**
     *  \brief DB SETEX  Args are moved!
@@ -516,7 +516,7 @@ public:
     *  \param ttl int
     *  \param value const std::string&
     **/
-	CREATE_FUNCTION(setEx, false, ([key = std::move(key), value = std::move(value), ttl](const DBConRef& ref){ return ref->setEx(key, ttl, value); }), const std::string& key, int ttl, const std::string& value);
+    CREATE_FUNCTION(setEx, false, ([key = std::move(key), value = std::move(value), ttl](const DBConRef& ref){ return ref->setEx(key, ttl, value); }), const std::string& key, int ttl, const std::string& value);
     
 
     /**
@@ -527,7 +527,7 @@ public:
     *  \param value const std::string&
     *  \param ttl int
     **/
-	CREATE_FUNCTION(expire, false, ([key = std::move(key), ttl](const DBConRef& ref){ return ref->expire(key, ttl); }), const std::string& key, int ttl);
+    CREATE_FUNCTION(expire, false, ([key = std::move(key), ttl](const DBConRef& ref){ return ref->expire(key, ttl); }), const std::string& key, int ttl);
     
     /**
     *  \brief DB DEL  Args are moved!
@@ -535,21 +535,21 @@ public:
     *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     **/
-	CREATE_FUNCTION(del, false, ([key = std::move(key)](const DBConRef& ref){ return ref->del(key); }), const std::string& key);
-	
+    CREATE_FUNCTION(del, false, ([key = std::move(key)](const DBConRef& ref){ return ref->del(key); }), const std::string& key);
+    
     /**
     *  \brief DB TTL  Args are moved!
     *
     *  \param key const std::string&
     **/
-	CREATE_FUNCTION(ttl, -1, ([key = std::move(key)](const DBConRef& ref){ return ref->ttl(key); }), const std::string& key);
+    CREATE_FUNCTION(ttl, -1, ([key = std::move(key)](const DBConRef& ref){ return ref->ttl(key); }), const std::string& key);
 
     /**
     *  \brief DB PING
     *
     **/
-	CREATE_FUNCTION_NO_ARGS(ping, "false", ([](const DBConRef& ref){ return ref->ping(); }));
-	
+    CREATE_FUNCTION_NO_ARGS(ping, "false", ([](const DBConRef& ref){ return ref->ping(); }));
+    
     /**
     *  \brief DB Can execute SQL Query
     *

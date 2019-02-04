@@ -19,7 +19,7 @@ namespace SQLiteCon_Detail {
         SQLiteDBHolder() {};
         ~SQLiteDBHolder() {
             // TODO check if cleanup is needed
-			// i.e. db close, save/commit
+            // i.e. db close, save/commit
         }
     };
     typedef std::shared_ptr< SQLiteDBHolder > DbHolderRef;
@@ -36,7 +36,7 @@ private:
     std::string defaultKeyValTableName = "KeyValueTable";
     bool extendedLogging = false;
 
-	SQLiteCon_Detail::DbHolderRef holderRef = nullptr;
+    SQLiteCon_Detail::DbHolderRef holderRef = nullptr;
 
 public:
 

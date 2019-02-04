@@ -8,11 +8,11 @@ SQLiteConnector::SQLiteConnector(const DBConfig& config) {
     SQLiteCon_Detail::DbHolderRef ref;
     try {
 
-		std::lock_guard<std::mutex> lock(SQLiteCon_Detail::dbHolderRefsMutex);
+        std::lock_guard<std::mutex> lock(SQLiteCon_Detail::dbHolderRefsMutex);
         if (SQLiteCon_Detail::dbHolderRefs.find(config.dbname) == SQLiteCon_Detail::dbHolderRefs.end()) {
             SQLiteCon_Detail::DbHolderRef holder = std::make_shared< SQLiteCon_Detail::SQLiteDBHolder >();
             holder->SQLiteDB = std::make_shared<SQLite::Database>(config.dbname + ".db3", SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
-			SQLiteCon_Detail::dbHolderRefs.insert({ config.dbname, holder });
+            SQLiteCon_Detail::dbHolderRefs.insert({ config.dbname, holder });
             ref = holder;
         }
         else {
@@ -23,16 +23,16 @@ SQLiteConnector::SQLiteConnector(const DBConfig& config) {
     catch (SQLite::Exception& e) {   
     }
 
-	if (!ref || !ref->SQLiteDB) {
-		throw std::runtime_error("Error creating the sqlite db");
-	}
+    if (!ref || !ref->SQLiteDB) {
+        throw std::runtime_error("Error creating the sqlite db");
+    }
 
-	this->holderRef = ref;
+    this->holderRef = ref;
 
-	std::lock_guard<std::mutex> lock(ref->SQLiteDBMutex);
-	auto dbRef = ref->SQLiteDB;
+    std::lock_guard<std::mutex> lock(ref->SQLiteDBMutex);
+    auto dbRef = ref->SQLiteDB;
     
-	bool exists;
+    bool exists;
     try {
         exists = dbRef->tableExists(this->defaultKeyValTableName);
     }
@@ -72,23 +72,23 @@ SQLiteConnector::~SQLiteConnector() {
 **/
 std::string SQLiteConnector::get(const std::string& key) {
     
-	if (!this->holderRef || !this->holderRef->SQLiteDB) throw std::runtime_error("SQLite DB undefined");
-	
-	std::lock_guard<std::mutex> lock(this->holderRef->SQLiteDBMutex);
+    if (!this->holderRef || !this->holderRef->SQLiteDB) throw std::runtime_error("SQLite DB undefined");
+    
+    std::lock_guard<std::mutex> lock(this->holderRef->SQLiteDBMutex);
 
-	try {
+    try {
 
-		SQLite::Statement query(*holderRef->SQLiteDB, "SELECT value FROM ? WHERE key=? AND (ttl IS NULL OR ttl > strftime('%s','now'))");
-		query.bind(1, this->defaultKeyValTableName);
-		query.bind(2, key);
+        SQLite::Statement query(*holderRef->SQLiteDB, "SELECT value FROM ? WHERE key=? AND (ttl IS NULL OR ttl > strftime('%s','now'))");
+        query.bind(1, this->defaultKeyValTableName);
+        query.bind(2, key);
 
-		query.executeStep();
+        query.executeStep();
 
-		return query.getColumn(0);
-	}
-	catch (SQLite::Exception& e) {
-		return "";
-	}
+        return query.getColumn(0);
+    }
+    catch (SQLite::Exception& e) {
+        return "";
+    }
 }
 
 std::string SQLiteConnector::getRange(const std::string& key, unsigned int from, unsigned int to) {
@@ -109,40 +109,40 @@ std::string SQLiteConnector::getRange(const std::string& key, unsigned int from,
 std::pair<std::string, int> SQLiteConnector::getWithTtl(const std::string& key) {
     if (!this->holderRef || !this->holderRef->SQLiteDB) throw std::runtime_error("SQLite DB undefined");
 
-	std::lock_guard<std::mutex> lock(this->holderRef->SQLiteDBMutex);
+    std::lock_guard<std::mutex> lock(this->holderRef->SQLiteDBMutex);
 
-	try {
+    try {
 
-		SQLite::Statement query(*holderRef->SQLiteDB, "SELECT value, ttl, strftime('%s','now') FROM ? WHERE key=? AND (ttl IS NULL OR ttl > strftime('%s','now'))");
-		query.bind(1, this->defaultKeyValTableName);
-		query.bind(2, key);
+        SQLite::Statement query(*holderRef->SQLiteDB, "SELECT value, ttl, strftime('%s','now') FROM ? WHERE key=? AND (ttl IS NULL OR ttl > strftime('%s','now'))");
+        query.bind(1, this->defaultKeyValTableName);
+        query.bind(2, key);
 
-		query.executeStep();
+        query.executeStep();
 
-		return { query.getColumn(0), static_cast<long int>(query.getColumn(1)) - static_cast<long int>(query.getColumn(2)) };
+        return { query.getColumn(0), static_cast<long int>(query.getColumn(1)) - static_cast<long int>(query.getColumn(2)) };
 
-	}
-	catch (SQLite::Exception& e) {
-		return { "", -1 };
-	}
+    }
+    catch (SQLite::Exception& e) {
+        return { "", -1 };
+    }
 }
 
 bool SQLiteConnector::exists(const std::string& key) {
-	if (!this->holderRef || !this->holderRef->SQLiteDB) throw std::runtime_error("SQLite DB undefined");
+    if (!this->holderRef || !this->holderRef->SQLiteDB) throw std::runtime_error("SQLite DB undefined");
 
-	std::lock_guard<std::mutex> lock(this->holderRef->SQLiteDBMutex);
+    std::lock_guard<std::mutex> lock(this->holderRef->SQLiteDBMutex);
 
-	try {
+    try {
 
-		SQLite::Statement query(*holderRef->SQLiteDB, "SELECT value FROM ? WHERE key=? AND (ttl IS NULL OR ttl > strftime('%s','now'))");
-		query.bind(1, this->defaultKeyValTableName);
-		query.bind(2, key);
+        SQLite::Statement query(*holderRef->SQLiteDB, "SELECT value FROM ? WHERE key=? AND (ttl IS NULL OR ttl > strftime('%s','now'))");
+        query.bind(1, this->defaultKeyValTableName);
+        query.bind(2, key);
 
-		return query.executeStep();
-	}
-	catch (SQLite::Exception& e) {
-		return false;
-	}
+        return query.executeStep();
+    }
+    catch (SQLite::Exception& e) {
+        return false;
+    }
 }
 
 /**
@@ -150,61 +150,61 @@ bool SQLiteConnector::exists(const std::string& key) {
 *  Key
 **/
 bool SQLiteConnector::set(const std::string& key, const std::string& value) {
-	if (!this->holderRef || !this->holderRef->SQLiteDB) throw std::runtime_error("SQLite DB undefined");
+    if (!this->holderRef || !this->holderRef->SQLiteDB) throw std::runtime_error("SQLite DB undefined");
 
-	std::lock_guard<std::mutex> lock(this->holderRef->SQLiteDBMutex);
+    std::lock_guard<std::mutex> lock(this->holderRef->SQLiteDBMutex);
 
-	try {
+    try {
 
-		SQLite::Statement query(*holderRef->SQLiteDB, "INSERT INTO ? (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value");
-		query.bind(1, this->defaultKeyValTableName);
-		query.bind(2, key);
-		query.bind(3, value);
+        SQLite::Statement query(*holderRef->SQLiteDB, "INSERT INTO ? (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value");
+        query.bind(1, this->defaultKeyValTableName);
+        query.bind(2, key);
+        query.bind(3, value);
 
-		return query.exec() != 0;
-	}
-	catch (SQLite::Exception& e) {
-		return false;
-	}
+        return query.exec() != 0;
+    }
+    catch (SQLite::Exception& e) {
+        return false;
+    }
 }
 
 bool SQLiteConnector::setEx(const std::string& key, int ttl, const std::string& value) {
-	if (!this->holderRef || !this->holderRef->SQLiteDB) throw std::runtime_error("SQLite DB undefined");
+    if (!this->holderRef || !this->holderRef->SQLiteDB) throw std::runtime_error("SQLite DB undefined");
 
-	std::lock_guard<std::mutex> lock(this->holderRef->SQLiteDBMutex);
+    std::lock_guard<std::mutex> lock(this->holderRef->SQLiteDBMutex);
 
-	try {
+    try {
 
-		SQLite::Statement query(*holderRef->SQLiteDB, "INSERT INTO ? (key,value,ttl) VALUES (?,?, strftime('%s','now') + ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, ttl=excluded.ttl");
-		query.bind(1, this->defaultKeyValTableName);
-		query.bind(2, key);
-		query.bind(3, value);
-		query.bind(4, ttl);
+        SQLite::Statement query(*holderRef->SQLiteDB, "INSERT INTO ? (key,value,ttl) VALUES (?,?, strftime('%s','now') + ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, ttl=excluded.ttl");
+        query.bind(1, this->defaultKeyValTableName);
+        query.bind(2, key);
+        query.bind(3, value);
+        query.bind(4, ttl);
 
-		return query.exec() != 0;
-	}
-	catch (SQLite::Exception& e) {
-		return false;
-	}
+        return query.exec() != 0;
+    }
+    catch (SQLite::Exception& e) {
+        return false;
+    }
 }
 
 bool SQLiteConnector::expire(const std::string& key, int ttl) {
-	if (!this->holderRef || !this->holderRef->SQLiteDB) throw std::runtime_error("SQLite DB undefined");
+    if (!this->holderRef || !this->holderRef->SQLiteDB) throw std::runtime_error("SQLite DB undefined");
 
-	std::lock_guard<std::mutex> lock(this->holderRef->SQLiteDBMutex);
+    std::lock_guard<std::mutex> lock(this->holderRef->SQLiteDBMutex);
 
-	try {
+    try {
 
-		SQLite::Statement query(*holderRef->SQLiteDB, "UPDATE ? SET ttl=strftime('%s','now')+? WHERE key=?");
-		query.bind(1, this->defaultKeyValTableName);
-		query.bind(2, key);
-		query.bind(3, ttl);
+        SQLite::Statement query(*holderRef->SQLiteDB, "UPDATE ? SET ttl=strftime('%s','now')+? WHERE key=?");
+        query.bind(1, this->defaultKeyValTableName);
+        query.bind(2, key);
+        query.bind(3, ttl);
 
-		return query.exec() != 0;
-	}
-	catch (SQLite::Exception& e) {
-		return false;
-	}
+        return query.exec() != 0;
+    }
+    catch (SQLite::Exception& e) {
+        return false;
+    }
 }
 
 /**
@@ -212,28 +212,28 @@ bool SQLiteConnector::expire(const std::string& key, int ttl) {
 *  Key
 **/
 bool SQLiteConnector::del(const std::string& key) {
-	if (!this->holderRef || !this->holderRef->SQLiteDB) throw std::runtime_error("SQLite DB undefined");
+    if (!this->holderRef || !this->holderRef->SQLiteDB) throw std::runtime_error("SQLite DB undefined");
 
-	std::lock_guard<std::mutex> lock(this->holderRef->SQLiteDBMutex);
+    std::lock_guard<std::mutex> lock(this->holderRef->SQLiteDBMutex);
 
-	try {
+    try {
 
-		SQLite::Statement query(*holderRef->SQLiteDB, "DELETE FROM ? WHERE key=?");
-		query.bind(1, this->defaultKeyValTableName);
-		query.bind(2, key);
+        SQLite::Statement query(*holderRef->SQLiteDB, "DELETE FROM ? WHERE key=?");
+        query.bind(1, this->defaultKeyValTableName);
+        query.bind(2, key);
 
-		return query.exec() != 0;
-	}
-	catch (SQLite::Exception& e) {
-		return false;
-	}
+        return query.exec() != 0;
+    }
+    catch (SQLite::Exception& e) {
+        return false;
+    }
 }
 
 /**
 *  DB PING
 **/
 std::string SQLiteConnector::ping() {
-	return std::to_string(this->holderRef && this->holderRef->SQLiteDB);
+    return std::to_string(this->holderRef && this->holderRef->SQLiteDB);
 }
 
 /**
@@ -241,22 +241,22 @@ std::string SQLiteConnector::ping() {
 *  Key
 **/
 int SQLiteConnector::ttl(const std::string& key) {
-	if (!this->holderRef || !this->holderRef->SQLiteDB) throw std::runtime_error("SQLite DB undefined");
+    if (!this->holderRef || !this->holderRef->SQLiteDB) throw std::runtime_error("SQLite DB undefined");
 
-	std::lock_guard<std::mutex> lock(this->holderRef->SQLiteDBMutex);
+    std::lock_guard<std::mutex> lock(this->holderRef->SQLiteDBMutex);
 
-	try {
+    try {
 
-		SQLite::Statement query(*holderRef->SQLiteDB, "SELECT ttl, strftime('%s','now') FROM ? WHERE key=? AND (ttl IS NULL OR ttl > strftime('%s','now'))");
-		query.bind(1, this->defaultKeyValTableName);
-		query.bind(2, key);
+        SQLite::Statement query(*holderRef->SQLiteDB, "SELECT ttl, strftime('%s','now') FROM ? WHERE key=? AND (ttl IS NULL OR ttl > strftime('%s','now'))");
+        query.bind(1, this->defaultKeyValTableName);
+        query.bind(2, key);
 
-		query.executeStep();
+        query.executeStep();
 
-		return static_cast<long int>(query.getColumn(0)) - static_cast<long int >(query.getColumn(1));
+        return static_cast<long int>(query.getColumn(0)) - static_cast<long int >(query.getColumn(1));
 
-	}
-	catch (SQLite::Exception& e) {
-		return -1;
-	}
+    }
+    catch (SQLite::Exception& e) {
+        return -1;
+    }
 }

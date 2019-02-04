@@ -17,7 +17,7 @@ public:
     RedisConnector(const DBConfig& Config);
     ~RedisConnector();
 
-	std::shared_ptr<cpp_redis::client> client;
+    std::shared_ptr<cpp_redis::client> client;
 
     /*
     *  DB GET

@@ -87,8 +87,8 @@ INCLUDE_DIRECTORIES( "${CMAKE_SOURCE_DIR}/deps/happyhttp" )
 ##############################################################################
 INCLUDE_DIRECTORIES( ${CMAKE_CURRENT_SOURCE_DIR} ${INTERCEPT_INCLUDE_PATH} )
 ADD_LIBRARY( ${INTERCEPT_PLUGIN_NAME} SHARED 
-	${INTERCEPT_PLUGIN_SOURCES}
-	${INTERCEPT_HOST_SOURCES}	
+    ${INTERCEPT_PLUGIN_SOURCES}
+    ${INTERCEPT_HOST_SOURCES}
     ${SOURCES_HTTP} 
 )
 
@@ -156,13 +156,13 @@ SET_TARGET_PROPERTIES( ${INTERCEPT_PLUGIN_NAME} PROPERTIES PREFIX "" )
 SET_TARGET_PROPERTIES( ${INTERCEPT_PLUGIN_NAME} PROPERTIES FOLDER "${CMAKE_PROJECT_NAME}" )
 
 if(CMAKE_COMPILER_IS_GNUCXX)
-	SET( CMAKE_CXX_FLAGS "-std=c++1z -O2 -s -fPIC -fpermissive -static-libgcc -static-libstdc++ -march=i686 -m32" )
-	SET( CMAKE_FIND_LIBRARY_SUFFIXES ".a" )
-	SET( CMAKE_SHARED_LINKER_FLAGS "-shared -static-libgcc -static-libstdc++" )
+    SET( CMAKE_CXX_FLAGS "-std=c++1z -O2 -s -fPIC -fpermissive -static-libgcc -static-libstdc++ -march=i686 -m32" )
+    SET( CMAKE_FIND_LIBRARY_SUFFIXES ".a" )
+    SET( CMAKE_SHARED_LINKER_FLAGS "-shared -static-libgcc -static-libstdc++" )
 else()
-	SET( CMAKE_CXX_FLAGS_DEBUG "/D_DEBUG /MTd /Zi /Ob0 /Od /RTC1 /MP /EHsc" )
-	SET( CMAKE_CXX_FLAGS_RELEASE "/MT /Zi /O2 /Ob1 /EHsc /MP" ) #with debug info
+    SET( CMAKE_CXX_FLAGS_DEBUG "/D_DEBUG /MTd /Zi /Ob0 /Od /RTC1 /MP /EHsc" )
+    SET( CMAKE_CXX_FLAGS_RELEASE "/MT /Zi /O2 /Ob1 /EHsc /MP" ) #with debug info
     SET( CMAKE_C_FLAGS_DEBUG "/D_DEBUG /MTd /Zi /Ob0 /Od /RTC1 /MP /EHsc" )
-	SET( CMAKE_C_FLAGS_RELEASE "/MT /Zi /O2 /Ob1 /EHsc /MP" ) #with debug info
-	SET( CMAKE_SHARED_LINKER_FLAGS_RELEASE "/OPT:REF /DEBUG:FULL" )
+    SET( CMAKE_C_FLAGS_RELEASE "/MT /Zi /O2 /Ob1 /EHsc /MP" ) #with debug info
+    SET( CMAKE_SHARED_LINKER_FLAGS_RELEASE "/OPT:REF /DEBUG:FULL" )
 endif()

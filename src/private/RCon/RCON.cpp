@@ -228,7 +228,7 @@ bool RCON::is_logged_in() {
 }
 
 RCON::~RCON(void) {
-	
+    
     this->send_heart_beat = false;
     this->run_thread = false;
 
@@ -238,35 +238,35 @@ RCON::~RCON(void) {
 }
 
 void RCON::connect() {
-	
-	// Login Packet
-	Packet rcon_packet;
-	rcon_packet.command = password;
-	rcon_packet.type = RCON::message_type::LOGIN;
+    
+    // Login Packet
+    Packet rcon_packet;
+    rcon_packet.command = password;
+    rcon_packet.type = RCON::message_type::LOGIN;
     this->send_packet(rcon_packet);
-	
+    
 }
 
 void RCON::handle_rec(const std::string& msg, std::size_t bytes_received) {
-	
+    
     if (msg.size() >= 8) {
-		switch (msg[7]) {
-			case RCON::message_type::SERVER:{
+        switch (msg[7]) {
+            case RCON::message_type::SERVER:{
                 this->server_response(msg);
-				break;
-			}
-			case RCON::message_type::CHAT:{
+                break;
+            }
+            case RCON::message_type::CHAT:{
                 this->chat_message(msg);
-				break;
-			}
+                break;
+            }
             case RCON::message_type::LOGIN:{
                 this->login_response(msg);
-				break;
-			}
-			default : {
-			}
-		};
-	}
+                break;
+            }
+            default : {
+            }
+        };
+    }
 }
 
 void RCON::send_packet(const Packet& rcon_packet) {
@@ -279,7 +279,7 @@ void RCON::send_packet(const Packet& rcon_packet) {
     [this](int _bytes) {
         this->handle_sent(_bytes);
     });
-	
+    
 }
 
 void RCON::send_packet(const Packet& rcon_packet, std::function<void(int)> _handle_sent) {
@@ -343,20 +343,20 @@ std::string RCON::make_be_message(const std::string& cmd, const message_type& _t
 }
 
 void RCON::handle_sent(int _bytes_sent) {
-	if (_bytes_sent < 0) {
+    if (_bytes_sent < 0) {
         // Error
-	}
+    }
 }
 
 void RCON::login_response(const std::string& _response) {
 
-	if (_response[8] == 0x01) {
+    if (_response[8] == 0x01) {
         this->loggedin = true;
         this->refresh_players();
-	}
-	else {
+    }
+    else {
         this->loggedin = false;
-	}
+    }
 
 }
 
@@ -371,8 +371,8 @@ void RCON::server_response(const std::string& msg) {
         return;
     }
 
-	//ACK seq num
-	unsigned char seq_num = msg[8];
+    //ACK seq num
+    unsigned char seq_num = msg[8];
 
     //extra header
     //0x00 | number of packets for this response | 0 - based index of the current packet
@@ -381,15 +381,15 @@ void RCON::server_response(const std::string& msg) {
     //general
     //0x01 | received 1-byte sequence number | (possible header and/or response (ASCII string without null-terminator) OR nothing)
 
-	if (!extra_header) {
-		std::string result = msg.substr(9);
+    if (!extra_header) {
+        std::string result = msg.substr(9);
         this->process_message(seq_num, result);
-	}
-	else {
-		
+    }
+    else {
+        
         //parse extra header
-		unsigned char packets = msg[10];
-		unsigned char packet = msg[11];
+        unsigned char packets = msg[10];
+        unsigned char packet = msg[11];
 
         std::string payload;
         if (msg.size() > 12) {
@@ -443,24 +443,24 @@ void RCON::server_response(const std::string& msg) {
         if (_all_received) {
             this->process_message(seq_num, payload);
         }
-	}
+    }
 }
 
 void RCON::chat_message(const std::string& msg) {
-	
-	// Respond to Server Msgs i.e chat messages, to prevent timeout
-	Packet rcon_packet;
-	rcon_packet.type = RCON::message_type::CHAT;
-	rcon_packet.command = msg[8];
+    
+    // Respond to Server Msgs i.e chat messages, to prevent timeout
+    Packet rcon_packet;
+    rcon_packet.type = RCON::message_type::CHAT;
+    rcon_packet.command = msg[8];
     this->send_packet(rcon_packet);
 
     // Received Chat Messages
     std::string result = msg.substr(9);
-	
+    
     //algorithm::trim(result);
-	if (utils::starts_with(result, "Player #")) {
+    if (utils::starts_with(result, "Player #")) {
 
-		if (utils::ends_with(result, " connected")) {
+        if (utils::ends_with(result, " connected")) {
             result = result.substr(8);
             
             auto _space = result.find(" ");
@@ -475,9 +475,9 @@ void RCON::chat_message(const std::string& msg) {
 
             this->on_player_connect(player_number, player_name, ip, port);
 
-		}
-		else if (utils::ends_with(result, "disconnected")) {
-			
+        }
+        else if (utils::ends_with(result, "disconnected")) {
+            
             auto found = result.find(" ");
             std::string player_number = result.substr(0, found);
 
@@ -485,23 +485,23 @@ void RCON::chat_message(const std::string& msg) {
             std::string player_name = result.substr(found + 1, found2 - (found + 1));
             
             this->on_player_disconnect(player_number, player_name);
-		}
-	}
-	else if (utils::starts_with(result, "Verified GUID")) {
-		
+        }
+    }
+    else if (utils::starts_with(result, "Verified GUID")) {
+        
         auto pos_1 = result.find("(");
-		auto pos_2 = result.find(")", pos_1);
+        auto pos_2 = result.find(")", pos_1);
 
-		std::string player_guid = result.substr((pos_1 + 1), (pos_2 - (pos_1 + 1)));
+        std::string player_guid = result.substr((pos_1 + 1), (pos_2 - (pos_1 + 1)));
 
-		pos_1 = result.find("#");
-		pos_2 = result.find(" ", pos_1);
-		std::string player_number = result.substr((pos_1 + 1), (pos_2 - (pos_1 + 1)));
-		std::string player_name = result.substr(pos_2);
+        pos_1 = result.find("#");
+        pos_2 = result.find(" ", pos_1);
+        std::string player_number = result.substr((pos_1 + 1), (pos_2 - (pos_1 + 1)));
+        std::string player_name = result.substr(pos_2);
 
         this->on_player_verified_guid(player_number, player_name, player_guid);
 
-	}
+    }
 }
 
 void RCON::on_player_connect(const std::string& _player_number, const std::string& _player_name, const std::string& _ip, int _port) {
@@ -575,10 +575,10 @@ void RCON::on_player_verified_guid(const std::string& _player_number, const std:
 
 void RCON::send_command(const std::string& command) {
 
-	Packet rcon_packet;
+    Packet rcon_packet;
     rcon_packet.command = command;
     remove_null_terminator(rcon_packet.command);
-	rcon_packet.type = RCON::message_type::SERVER;
+    rcon_packet.type = RCON::message_type::SERVER;
 
     this->send_packet(rcon_packet);
 }
@@ -610,11 +610,11 @@ void RCON::add_ban(const std::string& uid) {
 }
 
 void RCON::add_ban(const std::string& uid, const std::string& reason, int duration) {
-	
+    
     Packet rcon_packet;
-	rcon_packet.command = "addBan " + uid + " " + std::to_string(duration) + (reason.empty ? "" : (" " + reason));
+    rcon_packet.command = "addBan " + uid + " " + std::to_string(duration) + (reason.empty ? "" : (" " + reason));
     remove_null_terminator(rcon_packet.command);
-	rcon_packet.type = RCON::message_type::SERVER;
+    rcon_packet.type = RCON::message_type::SERVER;
 
     this->send_packet(rcon_packet, [this](int) {
         std::string cmd = "writeBans";
