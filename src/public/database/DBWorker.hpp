@@ -30,7 +30,7 @@
 *   
 * I did it this way to keep the database as simple as possible
 **/
-typedef std::variant<std::string, bool, float, std::pair<std::string, float>> DBReturn;
+typedef std::variant<std::string, bool, int, std::pair<std::string, int>> DBReturn;
 
 /**
 * Type/Variant of the callback - string: missionnamespace variable, code: actual function code, lambda: use of dbworker as API (internal)
@@ -38,16 +38,18 @@ typedef std::variant<std::string, bool, float, std::pair<std::string, float>> DB
 **/
 typedef std::variant<std::string, intercept::types::code, std::function<void(const DBReturn&)> > DBCallback;
 
+typedef std::shared_ptr<DBConnector> DBConRef;
+
 /**
 * Statement execution type
-* POLL - result will be inserted into result array
-* CALLBACK - if provided, a callback is executed as soon as the results are there
-* SYNC - none of the above is attempted, just the std::future is given back
+* ASYNC_CALLBACK - if provided, a callback is executed as soon as the results are there, otherweise its fire and forget
+* ASYNC_FUTURE - just the std::future is given back
+* ASYNC_POLL - returns a id for the request. the result can be polled with this id
 **/
-enum DBExecutionType {
-    ASYNC_POLL,
+enum class DBExecutionType {
     ASYNC_CALLBACK,
-    SYNC
+    ASYNC_FUTURE,
+	ASYNC_POLL
 };
 
 /**
@@ -74,7 +76,7 @@ private:
     **/
 
     /*!< pointers to the db connectors */
-    std::vector<std::pair<std::thread::id, std::shared_ptr<DBConnector> > > dbConnectors;
+    std::vector<std::pair<std::thread::id, DBConRef > > dbConnectors;
     std::atomic<unsigned int> dbConnectorUID = 0;
     size_t dbConnectorsCount = 0;
 
@@ -110,30 +112,27 @@ private:
       *   \param result DBReturn Result of the Database call
       *
       **/
-    void callbackResultIfNeeded(const DBStatementOptions& statement, const DBReturn& result) {
-        if (statement.type == DBExecutionType::ASYNC_CALLBACK) {
-            if (statement.callbackFnc.index() == 0 || statement.callbackFnc.index() == 1) {
-                // string to function name or code
-                intercept::client::invoker_lock lock;
-                intercept::types::code code;
-                if (statement.callbackFnc.index() == 0) {
-                    code = intercept::sqf::get_variable(intercept::sqf::mission_namespace(), std::get<std::string>(statement.callbackFnc));
-                }
-                else {
-                    code = std::get<intercept::types::code>(statement.callbackFnc);
-                }
-                if (!code.is_nil() && code.type_enum() == intercept::types::GameDataType::CODE) {
-                    intercept::sqf::call(code, auto_array<game_value>({
-                        game_value(result.index() == 0 ? std::get<std::string>(result) : std::to_string(result.index() == 1 ? std::get<bool>(result) : std::get<float>(result))),
-                        statement.callbackArg.has_value() ? statement.callbackArg.value() : game_value()
-                    }));
-                }
-            }
-            else {
-                // lambda function
-                auto fnc = std::get< std::function<void(const DBReturn&)> >(statement.callbackFnc);
-                fnc(result);
-            }
+    void callbackResultIfNeeded(
+		const DBReturn& result,
+		const std::optional<std::variant<std::function<void(const DBReturn&)>, intercept::types::code> >& fnc,
+		const std::optional<game_value>& args
+	) {
+		if (!fnc.has_value()) return;
+
+        if (fnc->index() == 1) {
+            // arma script code
+            intercept::client::invoker_lock lock;
+            intercept::sqf::call(
+				std::get<intercept::types::code>(*fnc),
+				auto_array<game_value>({
+					game_value(result.index() == 0 ? std::get<std::string>(result) : std::to_string(result.index() == 1 ? std::get<bool>(result) : std::get<int>(result))),
+					args.has_value() ? *args : game_value()
+				})
+			);
+        }
+        else {
+            // lambda function
+            std::get< std::function<void(const DBReturn&)> >(fnc.value())(result);
         }
     }
 
@@ -146,13 +145,11 @@ private:
       *   \param result std::shared_future<DBReturn> future to the result of the Database call
       *
       **/
-    unsigned long insertFutureIfNeeded(const DBStatementOptions& statement, const std::shared_future<DBReturn>& fut) {
-        if (statement.type == DBExecutionType::ASYNC_POLL) {
-            std::unique_lock<std::shared_mutex> lock(this->resultsMutex);
-            unsigned long id = this->currentId++;
-            this->results.emplace_back(std::pair<unsigned long, std::shared_future<DBReturn> >(id, fut));
-        }
-        return -1;
+    unsigned long insertFuture(const std::shared_future<DBReturn>& fut) {
+        std::unique_lock<std::shared_mutex> lock(this->resultsMutex);
+        unsigned long id = this->currentId++;
+        this->results.emplace_back(std::pair<unsigned long, std::shared_future<DBReturn> >(id, fut));
+        return id;
     }
 
     /**
@@ -246,7 +243,7 @@ private:
       *
       *   \throws std::runtime_exception if all connectors are assigned and anew one is requested
       **/
-    std::shared_ptr<DBConnector> getConnector() {
+	DBConRef getConnector() {
         auto tid = std::this_thread::get_id();
         for (auto& x : this->dbConnectors) {
             if (x.first == tid) {
@@ -257,7 +254,7 @@ private:
         if (newID >= this->dbConnectorsCount) {
             throw std::runtime_error("Unexpected amout of threads tried to get database connectors");
         }
-        std::shared_ptr<DBConnector> connector;
+		DBConRef connector;
         try {
             switch (dbConfig.dbType) {
             case DBType::MY_SQL: {
@@ -292,6 +289,37 @@ private:
         return connector;
     }
 
+	template<typename E>
+	std::function<DBReturn()> getFncWrapper(E&& errorValue, std::function<DBReturn(const DBConRef& ref)> f) {
+		return [this, errorValue = std::move(errorValue), fnc = std::move(f)](){
+			try {
+				auto& db = this->getConnector();
+				DBReturn result = fnc(db);
+				return result;
+			}
+			catch (std::exception& e) {
+				return static_cast<DBReturn>(errorValue);
+			}
+		};
+	}
+
+	template<typename E>
+	std::function<void()> getFncWrapper(E&& errorValue, std::function<DBReturn(const DBConRef& ref)> f,
+		const std::optional<std::variant<std::function<void(const DBReturn&)>, intercept::types::code> >& fnc,
+		const std::optional<game_value>& args
+	) {
+		return [this, errorValue = std::move(errorValue), fnc = std::move(f)
+				fnc = std::move(fnc), args = std::move(args)
+		](){
+			try {
+				auto& db = this->getConnector();
+				DBReturn result = fnc(db);
+				this->callbackResultIfNeeded(result, callback, args);
+			}
+			catch (std::exception& e) {}
+		};
+	}
+
 public:
 
     /**
@@ -311,7 +339,7 @@ public:
         this->dbConnectors.reserve(this->dbConnectorsCount);
         for (size_t i = 0; i < this->dbConnectorsCount; ++i) {
             this->dbConnectors.emplace_back(
-                std::pair < std::thread::id, std::shared_ptr<DBConnector> >(
+                std::pair < std::thread::id, DBConRef >(
                     std::thread::id(), nullptr
                 )
             );
@@ -352,7 +380,7 @@ public:
                 return x.second.valid() && x.second.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
             }
         }
-        return false;
+        throw std::runtime_error("Unknown request id");
     }
 
     /**
@@ -377,26 +405,74 @@ public:
         throw std::out_of_range("Unknown id");
     }
 
+#define CREATE_FUNCTION(fncname, defaultreturn, lambda, ...) \
+	template <DBExecutionType T>\
+	typename std::enable_if<T == DBExecutionType::ASYNC_FUTURE, std::shared_future<DBReturn> >::type\
+    fncname(__VA_ARGS__) {\
+		return threadpool->enqueue(\
+			this->getFncWrapper(defaultreturn, lambda);\
+        ).share();\
+    };\
+	template <DBExecutionType T>\
+	typename std::enable_if<T == DBExecutionType::ASYNC_CALLBACK, void >::type\
+	fncname(__VA_ARGS__,\
+		const std::optional<std::variant<std::function<void(const DBReturn&)>, intercept::types::code> >& fnc,\
+		const std::optional<game_value>& args\
+	) {\
+		threadpool->enqueue(\
+			this->getFncWrapper(defaultreturn, lambda, fnc, args)\
+		);\
+	};\
+	template <DBExecutionType T>\
+	typename std::enable_if<T == DBExecutionType::ASYNC_POLL, unsigned long>::type\
+	fncname(__VA_ARGS__) {\
+		return this->insertFuture(\
+			threadpool->enqueue(\
+				this->getFncWrapper(defaultreturn, lambda)\
+			).share()\
+		);\
+	};
+
+// TODO find a alternative to __VA_OPT__(,) and merge this into CREATE_FUNCTION
+#define CREATE_FUNCTION_NO_ARGS(fncname, defaultreturn, lambda) \
+	template <DBExecutionType T>\
+	typename std::enable_if<T == DBExecutionType::ASYNC_FUTURE, std::shared_future<DBReturn> >::type\
+    fncname() {\
+		return threadpool->enqueue(\
+			this->getFncWrapper(defaultreturn, lambda);\
+        ).share();\
+    };\
+	template <DBExecutionType T>\
+	typename std::enable_if<T == DBExecutionType::ASYNC_CALLBACK, void >::type\
+	fncname(\
+		const std::optional<std::variant<std::function<void(const DBReturn&)>, intercept::types::code> >& fnc,\
+		const std::optional<game_value>& args\
+	) {\
+		threadpool->enqueue(\
+			this->getFncWrapper(defaultreturn, lambda, fnc, args)\
+		);\
+	};\
+	template <DBExecutionType T>\
+	typename std::enable_if<T == DBExecutionType::ASYNC_POLL, unsigned long>::type\
+	fncname() {\
+		return this->insertFuture(\
+			threadpool->enqueue(\
+				this->getFncWrapper(defaultreturn, lambda)\
+			).share()\
+		);\
+	};
+
+
     /**
     *  \brief DB GET  Args are moved!
     *
     *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     **/
-    std::shared_future<DBReturn> get(const DBStatementOptions& statement, const std::string& key, unsigned long& id) {
-        auto fut = threadpool->enqueue(
-            [this, key{ std::move(key) }, statement{ std::move(statement) }](){
-                auto& db = this->getConnector();
-                auto result = db->get(key);
-                this->callbackResultIfNeeded(statement, result);
-                return DBReturn(result);
-            }
-        ).share();
-        id = this->insertFutureIfNeeded(statement, fut);
-        return fut;
-    };
 
-    /**
+	CREATE_FUNCTION(get, "", [key = std::move(key)](const DBConRef& ref){ return ref->get(key); }, const std::string& key);
+
+	/**
     *  \brief DB GETRANGE  Args are moved!
     *
     *  \param statement const DBStatementOptions&
@@ -405,18 +481,7 @@ public:
     *  \param to unsigned int
     *
     **/
-    std::shared_future<DBReturn> getRange(const DBStatementOptions& statement, const std::string& key, unsigned int from, unsigned int to, unsigned long& id) {
-        auto fut = threadpool->enqueue(
-            [this, key{ std::move(key) }, from{ std::move(from) }, to{ std::move(to) }, statement{ std::move(statement) }](){
-                auto& db = this->getConnector();
-                auto result = db->getRange(key, from, to);
-                this->callbackResultIfNeeded(statement, result);
-                return DBReturn(result);
-            }
-        ).share();
-        id = this->insertFutureIfNeeded(statement, fut);
-        return fut;
-    };
+	CREATE_FUNCTION(getRange, "", ([key = std::move(key), from, to](const DBConRef& ref){ return ref->getRange(key,from,to); }), const std::string& key, unsigned int from, unsigned int to);
 
     /**
     *  \brief DB GETTTL  Args are moved!
@@ -424,58 +489,25 @@ public:
     *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     **/
-    std::shared_future<DBReturn> getWithTtl(const DBStatementOptions& statement, const std::string& key, unsigned long& id) {
-        auto fut = threadpool->enqueue(
-            [this, key{ std::move(key) }, statement{ std::move(statement) }](){
-                auto& db = this->getConnector();
-                auto result = db->getWithTtl(key);
-                this->callbackResultIfNeeded(statement, result);
-                return DBReturn(result);
-            }
-        ).share();
-        id = this->insertFutureIfNeeded(statement, fut);
-        return fut;
-    };
-
+	CREATE_FUNCTION(getWithTtl, (std::pair<std::string, int>("", -1)), [key = std::move(key)](const DBConRef& ref){ return ref->getWithTtl(key); }, const std::string& key);
+	
     /**
     *  \brief DB EXISTS  Args are moved!
     *
     *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     **/
-    std::shared_future<DBReturn> exists(const DBStatementOptions& statement, const std::string& key, unsigned long& id) {
-        auto fut = threadpool->enqueue(
-            [this, key{ std::move(key) }, statement{ std::move(statement) }](){
-                auto& db = this->getConnector();
-                auto result = db->exists(key);
-                this->callbackResultIfNeeded(statement, result);
-                return DBReturn(result);
-            }
-        ).share();
-        id = this->insertFutureIfNeeded(statement, fut);
-        return fut;
-    };
-
-    /**
+	CREATE_FUNCTION(exists, false, [key = std::move(key)](const DBConRef& ref){ return ref->exists(key); }, const std::string& key);
+    
+	/**
     *  \brief DB SET  Args are moved!
     *
     *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     *  \param value const std::string&
     **/
-    std::shared_future<DBReturn> set(const DBStatementOptions& statement, const std::string& key, const std::string& value, unsigned long& id) {
-        auto fut = threadpool->enqueue(
-            [this, key{ std::move(key) }, value{ std::move(value) }, statement{ std::move(statement) }](){
-                auto& db = this->getConnector();
-                auto result = db->set(key, value);
-                this->callbackResultIfNeeded(statement, result);
-                return DBReturn(result);
-            }
-        ).share();
-        id = this->insertFutureIfNeeded(statement, fut);
-        return fut;
-    };
-
+	CREATE_FUNCTION(set, false, ([key = std::move(key), value = std::move(value)](const DBConRef& ref){ return ref->set(key,value); }), const std::string& key, const std::string& value);
+    
     /**
     *  \brief DB SETEX  Args are moved!
     *
@@ -484,18 +516,8 @@ public:
     *  \param ttl int
     *  \param value const std::string&
     **/
-    std::shared_future<DBReturn> setEx(const DBStatementOptions& statement, const std::string& key, int ttl, const std::string& value, unsigned long& id) {
-        auto fut = threadpool->enqueue(
-            [this, key{ std::move(key) }, value{ std::move(value) }, ttl{ std::move(ttl) }, statement{ std::move(statement) }](){
-                auto& db = this->getConnector();
-                auto result = db->setEx(key, ttl, value);
-                this->callbackResultIfNeeded(statement, result);
-                return DBReturn(result);
-            }
-        ).share();
-        id = this->insertFutureIfNeeded(statement, fut);
-        return fut;
-    };
+	CREATE_FUNCTION(setEx, false, ([key = std::move(key), value = std::move(value), ttl](const DBConRef& ref){ return ref->setEx(key, ttl, value); }), const std::string& key, int ttl, const std::string& value);
+    
 
     /**
     *  \brief DB EXPIRE  Args are moved!
@@ -505,74 +527,29 @@ public:
     *  \param value const std::string&
     *  \param ttl int
     **/
-    std::shared_future<DBReturn> expire(const DBStatementOptions& statement, const std::string& key, int ttl, unsigned long& id) {
-        auto fut = threadpool->enqueue(
-            [this, key{ std::move(key) }, ttl{ std::move(ttl) }, statement{ std::move(statement) }](){
-                auto& db = this->getConnector();
-                auto result = db->expire(key, ttl);
-                this->callbackResultIfNeeded(statement, result);
-                return DBReturn(result);
-            }
-        ).share();
-        id = this->insertFutureIfNeeded(statement, fut);
-        return fut;
-    };
-
+	CREATE_FUNCTION(expire, false, ([key = std::move(key), ttl](const DBConRef& ref){ return ref->expire(key, ttl); }), const std::string& key, int ttl);
+    
     /**
     *  \brief DB DEL  Args are moved!
     *
     *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     **/
-    std::shared_future<DBReturn> del(const DBStatementOptions& statement, const std::string& key, unsigned long& id) {
-        auto fut = threadpool->enqueue(
-            [this, key{ std::move(key) }, statement{ std::move(statement) }](){
-                auto& db = this->getConnector();
-                auto result = db->del(key);
-                this->callbackResultIfNeeded(statement, result);
-                return DBReturn(result);
-            }
-        ).share();
-        id = this->insertFutureIfNeeded(statement, fut);
-        return fut;
-    };
+	CREATE_FUNCTION(del, false, ([key = std::move(key)](const DBConRef& ref){ return ref->del(key); }), const std::string& key);
+	
+    /**
+    *  \brief DB TTL  Args are moved!
+    *
+    *  \param key const std::string&
+    **/
+	CREATE_FUNCTION(ttl, -1, ([key = std::move(key)](const DBConRef& ref){ return ref->ttl(key); }), const std::string& key);
 
     /**
     *  \brief DB PING
     *
     **/
-    std::shared_future<DBReturn> ping(const DBStatementOptions& statement, unsigned long& id) {
-        auto fut = threadpool->enqueue(
-            [this, statement{ std::move(statement) }](){
-                auto& db = this->getConnector();
-                auto result = db->ping();
-                this->callbackResultIfNeeded(statement, result);
-                return DBReturn(result);
-            }
-        ).share();
-        id = this->insertFutureIfNeeded(statement, fut);
-        return fut;
-    };
-
-    /**
-    *  \brief DB TTL  Args are moved!
-    *
-    *  \param statement const DBStatementOptions&
-    *  \param key const std::string&
-    **/
-    std::shared_future<DBReturn> ttl(const DBStatementOptions& statement, const std::string& key, unsigned long& id) {
-        auto fut = threadpool->enqueue(
-            [this, key{ std::move(key) }, statement{ std::move(statement) }](){
-                auto& db = this->getConnector();
-                auto result = db->ttl(key);
-                this->callbackResultIfNeeded(statement, (float)result);
-                return DBReturn((float)result);
-            }
-        ).share();
-        id = this->insertFutureIfNeeded(statement, fut);
-        return fut;
-    };
-
+	CREATE_FUNCTION_NO_ARGS(ping, "false", ([](const DBConRef& ref){ return ref->ping(); }));
+	
     /**
     *  \brief DB Can execute SQL Query
     *
