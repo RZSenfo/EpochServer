@@ -557,8 +557,78 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
     std::string out;
     int outCode = 0;
 
+    size_t fncLen = strlen(function);
+
     try {
-        if (!strncmp(function, "be", 2)) {
+        if (fncLen == 3) {
+            /* TODO Function codes
+            switch (function[0]) {
+            // db
+            case '1': {
+                bool async = function[2] == '1';
+                switch (function[1]) {
+                    // Poll
+                    case '0': {
+                        break;
+                    }
+                    // get
+                    case '1': {
+                        if (argsCnt < 2) throw std::runtime_error("Not enough args given for get");
+                        auto &worker = this->__getDbWorker(args[0]);
+                        unsigned long id = worker->get<DBExecutionType::ASYNC_POLL>(args[1]);
+                        SET_RESULT(0, std::to_string(id));
+                        break;
+                    }
+                    // getTtl
+                    case '2': {
+                        break;
+                    }
+                    // set
+                    case '3': {
+                        break;
+                    }
+                    // setEx
+                    case '4': {
+                        break;
+                    }
+                    // query
+                    case '5': {
+                        break;
+                    }
+                    // Exists
+                    case '6': {
+                        break;
+                    }
+                    // Expire
+                    case '7': {
+                        break;
+                    }
+                    // del
+                    case '8': {
+                        break;
+                    }
+                    // getRange
+                    case '9': {
+                        break;
+                    }
+                default: { SET_RESULT(1, "Unknown function"); }
+                };
+                break;
+            }
+            //be
+            case '2': {
+                break;
+            }
+            // 3-9 TODO
+            // util
+            case '0': {
+                break;
+            }
+            default: { SET_RESULT(1, "Unknown function"); }
+            };
+            */
+        }
+        else if (!strncmp(function, "be", 2)) {
             if (!strcmp(function, "beBroadcastMessage")) {
                 //(const std::string& message);
                 if (argsCnt < 1) throw std::runtime_error("Missing message param for beBroadcastMessage");
@@ -670,72 +740,73 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
             else if (!strcmp(function, "Set")) {
                 if (argsCnt < 3) throw std::runtime_error("Not enough args given for set");
                 auto &worker = this->__getDbWorker(args[0]);
-
-                unsigned long id = worker->set<DBExecutionType::ASYNC_POLL>(args[1], args[2]);
-                SET_RESULT(0, std::to_string(id));
+                worker->set<DBExecutionType::ASYNC_CALLBACK>(args[1], args[2], std::nullopt, std::nullopt);
             }
             else if (!strcmp(function, "SetEx")) {
                 if (argsCnt < 4) throw std::runtime_error("Not enough args given for setEx");
                 auto &worker = this->__getDbWorker(args[0]);
-
-                int ttl;
-                try {
-                    ttl = std::stoi(args[2]);
-                }
-                catch (std::exception& e) {
-                    throw std::runtime_error("Error parsing ttl for setEx");
-                }
-
-                unsigned long id = worker->setEx<DBExecutionType::ASYNC_POLL>(args[1], ttl, args[3]);
-                SET_RESULT(0, std::to_string(id));
+                int ttl = std::stoi(args[2]);
+                worker->setEx<DBExecutionType::ASYNC_CALLBACK>(args[1], ttl, args[3], std::nullopt, std::nullopt);
             }
             else if (!strcmp(function, "Expire")) {
                 if (argsCnt < 2) throw std::runtime_error("Not enough args given for expire");
                 auto &worker = this->__getDbWorker(args[0]);
-
-                int ttl;
-                try {
-                    ttl = std::stoi(args[2]);
-                }
-                catch (std::exception& e) {
-                    throw std::runtime_error("Error parsing ttl for expire");
-                }
-
-                unsigned long id = worker->expire<DBExecutionType::ASYNC_POLL>(args[1], ttl);
-                SET_RESULT(0, std::to_string(id));
+                int ttl = std::stoi(args[2]);
+                worker->expire<DBExecutionType::ASYNC_CALLBACK>(args[1], ttl, std::nullopt, std::nullopt);
             }
             else if (!strcmp(function, "Del")) {
                 if (argsCnt < 2) throw std::runtime_error("Not enough args given for del");
                 auto &worker = this->__getDbWorker(args[0]);
-
-                unsigned long id = worker->del<DBExecutionType::ASYNC_POLL>(args[1]);
-                SET_RESULT(0, std::to_string(id));
+                worker->del<DBExecutionType::ASYNC_CALLBACK>(args[1], std::nullopt, std::nullopt);
             }
             else if (!strcmp(function, "Query")) {
                 // TODO
                 SET_RESULT(1, "TODO");
-            }
-            else if (!strcmp(function, "GetRange")) {
-                if (argsCnt < 4) throw std::runtime_error("Not enough args given for getRange");
-                auto &worker = this->__getDbWorker(args[0]);
-
-                unsigned long from, to;
-                try {
-                    from = std::stoul(args[2]);
-                    to = std::stoul(args[3]);
-                }
-                catch (std::exception& e) {
-                    throw std::runtime_error("Error parsing indizes for getRange");
-                }
-
-                unsigned long id = worker->getRange<DBExecutionType::ASYNC_POLL>(args[1], from, to);
-                SET_RESULT(0, std::to_string(id));
             }
             else if (!strcmp(function, "GetTtl")) {
                 if (argsCnt < 2) throw std::runtime_error("Not enough args given for getTtl");
                 auto &worker = this->__getDbWorker(args[0]);
 
                 unsigned long id = worker->getWithTtl<DBExecutionType::ASYNC_POLL>(args[1]);
+                SET_RESULT(0, std::to_string(id));
+            }
+            else if (!strcmp(function, "SetSync")) {
+                if (argsCnt < 3) throw std::runtime_error("Not enough args given for set");
+                auto &worker = this->__getDbWorker(args[0]);
+
+                unsigned long id = worker->set<DBExecutionType::ASYNC_POLL>(args[1], args[2]);
+                SET_RESULT(0, std::to_string(id));
+            }
+            else if (!strcmp(function, "SetExSync")) {
+                if (argsCnt < 4) throw std::runtime_error("Not enough args given for setEx");
+                auto &worker = this->__getDbWorker(args[0]);
+                int ttl = std::stoi(args[2]);
+                unsigned long id = worker->setEx<DBExecutionType::ASYNC_POLL>(args[1], ttl, args[3]);
+                SET_RESULT(0, std::to_string(id));
+            }
+            else if (!strcmp(function, "ExpireSync")) {
+                if (argsCnt < 2) throw std::runtime_error("Not enough args given for expire");
+                auto &worker = this->__getDbWorker(args[0]);
+
+                int ttl = std::stoi(args[2]);
+                unsigned long id = worker->expire<DBExecutionType::ASYNC_POLL>(args[1], ttl);
+                SET_RESULT(0, std::to_string(id));
+            }
+            else if (!strcmp(function, "DelSync")) {
+                if (argsCnt < 2) throw std::runtime_error("Not enough args given for del");
+                auto &worker = this->__getDbWorker(args[0]);
+
+                unsigned long id = worker->del<DBExecutionType::ASYNC_POLL>(args[1]);
+                SET_RESULT(0, std::to_string(id));
+            }
+            else if (!strcmp(function, "GetRange")) {
+                if (argsCnt < 4) throw std::runtime_error("Not enough args given for getRange");
+                auto &worker = this->__getDbWorker(args[0]);
+
+                unsigned long from, to;
+                from = std::stoul(args[2]);
+                to = std::stoul(args[3]);
+                unsigned long id = worker->getRange<DBExecutionType::ASYNC_POLL>(args[1], from, to);
                 SET_RESULT(0, std::to_string(id));
             }
             else if (!strcmp(function, "Ping")) {
@@ -748,7 +819,7 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
                 SET_RESULT(1, "Unknown db command");
             }
         }
-        else if (!strcmp(function, "log")) {
+        else if (!strcmp(function, "extLog")) {
             if (argsCnt < 1) throw std::runtime_error("Nothing to log was provided");
             
             std::string msg = args[0];
