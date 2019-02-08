@@ -11,6 +11,7 @@
 #define WARNING logging::logfile->warn
 
 namespace logging {
+    // (main.cpp)
     extern std::shared_ptr<spdlog::logger> logfile;
 }
 
@@ -21,7 +22,7 @@ typedef unsigned char uint8;
 // THREADPOOL
 #include <ThreadPool.hpp>
 
-/*!< pointer to the threadpool */
+/*!< pointer to the threadpool (main.cpp) */
 extern std::unique_ptr<ThreadPool> threadpool;
 
 // INTERCEPT
@@ -33,7 +34,7 @@ extern std::unique_ptr<ThreadPool> threadpool;
 #include <string>
 #include <vector>
 
-// UTILS
+// UTILS (utils.cpp)
 namespace utils {
     void trim_right(std::string &str);
 
