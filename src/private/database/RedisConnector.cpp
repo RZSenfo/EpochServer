@@ -16,13 +16,15 @@ RedisConnector::RedisConnector(const DBConfig& Config) {
             throw std::runtime_error("Redis client could not connect");
         }
 
-        auto resp = this->client->auth(config.password);
-        this->client->sync_commit();
-
-        auto result = resp.get();
-        if (result.is_error()) {
-            throw std::runtime_error("Redis client could not connect. Wrong credentials");
+        if (!config.password.empty()) {
+            auto resp = this->client->auth(config.password);
+            this->client->sync_commit();
+            auto result = resp.get();
+            if (result.is_error()) {
+                throw std::runtime_error("Redis client could not connect. Wrong credentials");
+            }
         }
+
     }
     catch (cpp_redis::redis_error& e) {
         throw std::runtime_error(std::string("Error creating the redis connector: ") + e.what() );
