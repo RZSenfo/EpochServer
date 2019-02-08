@@ -231,31 +231,42 @@ void EpochServer::__setupConnection(const std::string& name, const rapidjson::Va
     
     if (!config.HasMember("type")) throw std::runtime_error("Undefined connection value: \"type\" in " + name);
     std::string type = config["type"].GetString();
+    
+    
     if (utils::iequals(type, "mysql")) {
+
+        if (!config.HasMember("database")) throw std::runtime_error("Undefined connection value: \"database\" in " + name);
+        
         dbConf.dbType = DBType::MY_SQL;
+        dbConf.ip = config.HasMember("ip") ? config["ip"].GetString() : "127.0.0.1";
+        dbConf.password = config.HasMember("password") ? config["password"].GetString() : "";
+        dbConf.user = config.HasMember("username") ? config["username"].GetString() : "root";;
+        dbConf.port = config.HasMember("port") ? config["port"].GetInt() : 3306;
+        dbConf.dbname = config["database"].GetString();
     }
     else if (utils::iequals(type, "redis")) {
+
+        if (!config.HasMember("password")) throw std::runtime_error("Undefined connection value: \"password\" in " + name);
+        if (!config.HasMember("database")) throw std::runtime_error("Undefined connection value: \"database\" in " + name);
+
         dbConf.dbType = DBType::REDIS;
+        dbConf.ip = config.HasMember("ip") ? config["ip"].GetString() : "127.0.0.1";
+        dbConf.port = config.HasMember("port") ? config["port"].GetInt() : 6379;
+        dbConf.password = config.HasMember("password") ? config["password"].GetString() : "";
     }
     else if (utils::iequals(type, "sqlite")) {
+        
+        if (!config.HasMember("database")) throw std::runtime_error("Undefined connection value: \"database\" in " + name);
+
         dbConf.dbType = DBType::SQLITE;
+        dbConf.dbname = config["database"].GetString();
     }
     else {
         throw std::runtime_error("Unknown database type: \"" + type + "\" in " + name);
     }
     
-    if (!config.HasMember("ip")) throw std::runtime_error("Undefined connection value: \"ip\" in " + name);
-    if (!config.HasMember("username")) throw std::runtime_error("Undefined connection value: \"username\" in " + name);
-    if (!config.HasMember("password")) throw std::runtime_error("Undefined connection value: \"password\" in " + name);
-    if (!config.HasMember("database")) throw std::runtime_error("Undefined connection value: \"database\" in " + name);
-
     dbConf.connectionName = name;
-    dbConf.ip = config["ip"].GetString();
-    dbConf.password = config["password"].GetString();
-    dbConf.user = config["username"].GetString();
-    dbConf.port = config["port"].GetInt();
-    dbConf.dbname = config["database"].GetString();
-
+    
     if (config.HasMember("statements") && config["statements"].IsObject()) {
         for (auto itr = config["statements"].MemberBegin(); itr != config["statements"].MemberEnd(); ++itr) {
             std::string statementName = itr->name.GetString();
@@ -628,76 +639,21 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
             };
             */
         }
-        else if (!strncmp(function, "be", 2)) {
-            if (!strcmp(function, "beBroadcastMessage")) {
-                //(const std::string& message);
-                if (argsCnt < 1) throw std::runtime_error("Missing message param for beBroadcastMessage");
-                threadpool->fireAndForget([this, x = std::string(args[0])]() {
-                    this->beBroadcastMessage(x);
-                });
-            }
-            else if (!strcmp(function, "beKick")) {
-                //(const std::string& playerGUID);
-                if (argsCnt < 1) throw std::runtime_error("Missing guid param in beKick");
-                threadpool->fireAndForget([this, x = std::string(args[0])]() {
-                    this->beKick(x);
-                });
-            }
-            else if (!strcmp(function, "beBan")) {
-                // (const std::string& playerGUID, const std::string& message, int duration);
-                if (argsCnt < 1) throw std::runtime_error("Missing params for beBan");
-                std::string msg = argsCnt > 1 ? args[1] : "BE Ban";
-                if (msg.empty()) msg = "BE Ban";
-                int dur = -1;
-                if (argsCnt > 2) {
-                    try {
-                        dur = std::stoi(args[2]);
-                    }
-                    catch (...) {
-                        WARNING(static_cast<std::string>("Could not parse banDuration, fallback to permaban. GUID: ") + args[0]);
-                    }
-                }
-                threadpool->fireAndForget([this, uid = std::string(args[0]), msg = std::move(msg), dur]() {
-                    this->beBan(uid, msg, dur);
-                });
-            }
-            else if (!strcmp(function, "beShutdown")) {
-                this->beShutdown();
-            }
-            else if (!strcmp(function, "beLock")) {
-                threadpool->fireAndForget([this]() {
-                    this->beLock();
-                });
-            }
-            else if (!strcmp(function, "beUnlock")) {
-                threadpool->fireAndForget([this]() {
-                    this->beUnlock();
-                });
-            }
-            else {
-                SET_RESULT(1, "Unknown be command");
-            }
-        }
         else if (!strncmp(function, "db", 2)) {
             // skip prefix TODO test encoding.. might need to skipp more bytes
             function += 2;
 
             if (!strcmp(function, "Poll")) {
-                if (argsCnt < 2 || strlen(args[0]) == 0 || strlen(args[1]) == 0)
+                if (argsCnt < 2 || strlen(args[0]) == 0 || strlen(args[1]) == 0) {
                     throw std::runtime_error("Invalid args for dbPoll");
-                
+                }
+
                 auto &worker = this->__getDbWorker(args[0]);
 
                 if (!worker) throw std::runtime_error(static_cast<std::string>("Database connection not found: ") + args[0]);
 
-                unsigned long id;
-                try {
-                    id = std::stoul(args[1]);
-                }
-                catch (...) {
-                    throw std::runtime_error("Could not parse request id");
-                }
-                
+                unsigned long id = std::stoul(args[1]);
+
                 try {
                     auto res = worker->tryPopResult(id);
                     if (res.index() == 0) {
@@ -728,7 +684,7 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
 
                 unsigned long id = worker->get<DBExecutionType::ASYNC_POLL>(args[1]);
                 SET_RESULT(0, std::to_string(id));
-                
+
             }
             else if (!strcmp(function, "Exists")) {
                 if (argsCnt < 2) throw std::runtime_error("Not enough args given for exists");
@@ -817,6 +773,56 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
             }
             else {
                 SET_RESULT(1, "Unknown db command");
+            }
+        }
+        else if (!strncmp(function, "be", 2)) {
+            if (!strcmp(function, "beBroadcastMessage")) {
+                //(const std::string& message);
+                if (argsCnt < 1) throw std::runtime_error("Missing message param for beBroadcastMessage");
+                threadpool->fireAndForget([this, x = std::string(args[0])]() {
+                    this->beBroadcastMessage(x);
+                });
+            }
+            else if (!strcmp(function, "beKick")) {
+                //(const std::string& playerGUID);
+                if (argsCnt < 1) throw std::runtime_error("Missing guid param in beKick");
+                threadpool->fireAndForget([this, x = std::string(args[0])]() {
+                    this->beKick(x);
+                });
+            }
+            else if (!strcmp(function, "beBan")) {
+                // (const std::string& playerGUID, const std::string& message, int duration);
+                if (argsCnt < 1) throw std::runtime_error("Missing params for beBan");
+                std::string msg = argsCnt > 1 ? args[1] : "BE Ban";
+                if (msg.empty()) msg = "BE Ban";
+                int dur = -1;
+                if (argsCnt > 2) {
+                    try {
+                        dur = std::stoi(args[2]);
+                    }
+                    catch (...) {
+                        WARNING(static_cast<std::string>("Could not parse banDuration, fallback to permaban. GUID: ") + args[0]);
+                    }
+                }
+                threadpool->fireAndForget([this, uid = std::string(args[0]), msg = std::move(msg), dur]() {
+                    this->beBan(uid, msg, dur);
+                });
+            }
+            else if (!strcmp(function, "beShutdown")) {
+                this->beShutdown();
+            }
+            else if (!strcmp(function, "beLock")) {
+                threadpool->fireAndForget([this]() {
+                    this->beLock();
+                });
+            }
+            else if (!strcmp(function, "beUnlock")) {
+                threadpool->fireAndForget([this]() {
+                    this->beUnlock();
+                });
+            }
+            else {
+                SET_RESULT(1, "Unknown be command");
             }
         }
         else if (!strcmp(function, "extLog")) {
