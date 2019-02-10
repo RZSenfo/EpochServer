@@ -119,7 +119,7 @@ void RCON::start() {
                         }
                     }
 
-                    //this will also decrease the conuter if its not cached
+                    //this will also decrease the counter if its not cached
                     if (_task != "") this->check_ip(_task);
                 }
 
@@ -569,6 +569,10 @@ void RCON::on_player_verified_guid(const std::string& _player_number, const std:
             _info.verified = true;
         }
         this->players.insert_or_assign(_player_name, _info);
+
+        if (this->player_joined_callback) {
+            this->player_joined_callback(_info);
+        }
 
     }
 }
@@ -1042,4 +1046,16 @@ void RCON::enable_vpn_suspecious_kicks() {
 
 void RCON::set_max_players(int _players) {
     this->whitelist_settings.max_players = _players;
+}
+
+void RCON::lockServer() {
+    this->send_command("#lock");
+}
+
+void RCON::unlockServer() {
+    this->send_command("#unlock");
+}
+
+void RCON::shutdownServer() {
+    this->send_command("#shutdown");
 }

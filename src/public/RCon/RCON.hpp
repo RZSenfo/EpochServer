@@ -86,6 +86,15 @@ public:
     void add_vpn_detection_guid_exception(const std::string& _guid);
     void enable_vpn_suspecious_kicks();
 
+    void setPlayerJoinedCallback(const std::function<void(const RconPlayerInfo&)>& callback) {
+        this->player_joined_callback = callback;
+    }
+
+    // commands
+    void lockServer();
+    void unlockServer();
+    void shutdownServer();
+
 private:
 
     void connect();
@@ -214,6 +223,10 @@ private:
     std::mutex task_mutex;
 
     void insert_task(std::shared_ptr<Task> _new_task);
+
+    // Callbacks for events
+    std::function<void(const RconPlayerInfo& player_info)> player_joined_callback;
+
 };
 
 #endif // RCON_HPP
