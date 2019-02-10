@@ -51,6 +51,35 @@ catch (cpp_redis::redis_error& e) {\
     return default_return;\
 }
 
+std::vector<std::string> RedisConnector::keys(const std::string& prefix) {
+
+    try {
+        if (!this->client->is_connected()) {
+            throw std::runtime_error("Redis client could not connect");
+        }
+        auto resp = this->client->keys(prefix + "*");
+        this->client->sync_commit();
+        auto result = resp.get();
+        if (result.is_error() || result.is_null()) {
+            return {};
+        }
+
+        std::vector<std::string> ret;
+        auto array = result.as_array();
+        ret.reserve(array.size());
+
+        for (auto&x : array) {
+            ret.emplace_back(x.as_string());
+        }
+
+        return ret;
+    }
+    catch (cpp_redis::redis_error& e) {
+        return {};
+    }
+
+}
+
 std::string RedisConnector::get(const std::string& key) {
     
     EXEC_COMMAND(get(key), "", result.as_string())

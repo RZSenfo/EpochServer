@@ -18,6 +18,7 @@ public:
     *  DB GET
     *  Key
     **/
+    virtual std::vector<std::string> keys(const std::string& pattern) = 0;
     virtual std::string get(const std::string& key) = 0;
     virtual std::string getRange(const std::string& key, unsigned int from, unsigned int to) = 0;
     virtual std::pair<std::string, int> getWithTtl(const std::string& key) = 0;

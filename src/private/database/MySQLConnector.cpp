@@ -100,6 +100,33 @@ bool MySQLConnector::__createKeyValueTable(const std::string& tableName) {
     }
 };
 
+std::vector<std::string> MySQLConnector::keys(const std::string & prefix)
+{
+    if (!this->con) throw std::runtime_error("Mysql DB undefined");
+
+    std::string execQry = "SELECT `key` FROM ? WHERE `key` LIKE ? AND (`ttl` IS NULL OR `ttl` > CURRENT_TIMESTAMP())";
+
+    auto statement = con->create_statement(execQry);
+    statement->set_string(0, this->defaultKeyValTableName);
+    statement->set_string(1, prefix + "%");
+
+    auto res = statement->query();
+    if (!res || res->error_no() != 0 || res->row_count() == 0) {
+        if (extendedLogging) WARNING("Call failed: " + (res ? res->error() : "empty result"));
+        return {};
+    }
+    else {
+
+        std::vector<std::string> ret;
+        ret.reserve(res->row_count());
+        do {
+            ret.emplace_back(res->get_string(0));
+        } while (res->next());
+
+        return ret;
+    }
+}
+
 std::string MySQLConnector::get(const std::string& _key) {
     
     if (!this->con) throw std::runtime_error("Mysql DB undefined");

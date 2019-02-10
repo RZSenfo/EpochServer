@@ -70,6 +70,31 @@ SQLiteConnector::~SQLiteConnector() {
 *  DB GET
 *  Key
 **/
+std::vector< std::string > SQLiteConnector::keys(const std::string& prefix) {
+
+    if (!this->holderRef || !this->holderRef->SQLiteDB) throw std::runtime_error("SQLite DB undefined");
+
+    std::lock_guard<std::mutex> lock(this->holderRef->SQLiteDBMutex);
+
+    try {
+
+        SQLite::Statement query(*holderRef->SQLiteDB, "SELECT key FROM ? WHERE key LIKE ? AND (ttl IS NULL OR ttl > strftime('%s','now'))");
+        query.bind(1, this->defaultKeyValTableName);
+        query.bind(2, prefix + "%");
+
+        std::vector< std::string > ret;
+
+        while (query.executeStep()) {
+            ret.emplace_back(query.getColumn(0));
+        }
+
+        return ret;
+    }
+    catch (SQLite::Exception& e) {
+        return {};
+    }
+}
+
 std::string SQLiteConnector::get(const std::string& key) {
     
     if (!this->holderRef || !this->holderRef->SQLiteDB) throw std::runtime_error("SQLite DB undefined");

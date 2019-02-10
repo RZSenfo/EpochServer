@@ -34,6 +34,7 @@ public:
     *  DB GET
     *  Key
     */
+    std::vector<std::string> keys(const std::string& prefix);
     std::string get(const std::string& key);
     std::string getRange(const std::string& key, unsigned int from, unsigned int to);
     std::pair<std::string, int> getWithTtl(const std::string& key);
