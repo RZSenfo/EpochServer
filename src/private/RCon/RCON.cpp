@@ -1,16 +1,12 @@
 #include <RCon/RCON.hpp>
 
-#include <httplib.h>
-#include <rapidjson/document.h>
-#include <rapidjson/error/error.h>
-
 void RCON::remove_null_terminator(std::string& _str) {
     if (_str.size() > 0 && _str[_str.size() - 1] == '\0') {
         _str.erase(_str.size() - 1);
     }
 }
 
-RCON::RCON(const std::string& _ip, int _port, const std::string& _pw, bool _delayed = false) : 
+RCON::RCON(const std::string& _ip, int _port, const std::string& _pw) : 
     host(_ip), 
     port(_port), 
     password(_pw) {
@@ -25,8 +21,6 @@ RCON::RCON(const std::string& _ip, int _port, const std::string& _pw, bool _dela
     
     this->remove_null_terminator(this->password);
     
-    this->start();
-
 }
 
 void RCON::start() {
@@ -36,7 +30,6 @@ void RCON::start() {
     });
 
     auto _now = std::chrono::system_clock::now();
-    this->ip_last_time_intervall = _now;
     this->last_heart_beat = this->last_ACK = _now - std::chrono::seconds(30);
 
     if (this->socket->is_connected()) {
@@ -101,28 +94,7 @@ void RCON::start() {
 
                 }
 
-                //check ip intervall
-                _duration = std::chrono::duration_cast<std::chrono::seconds>(_now - ip_last_time_intervall);
-                if (_duration > std::chrono::seconds(60)) {
-                    this->ip_counter_this_minute = 24; //free plan limit
-                    this->ip_last_time_intervall = _now;
-                }
-
-                //check ip tasks
-                if (ip_counter_this_minute > 0) {
-                    std::string _task;
-                    {
-                        std::lock_guard<std::mutex> lock(ip_check_tasks_mutex);
-                        if (!this->ip_check_tasks.empty()) {
-                            _task = this->ip_check_tasks.front();
-                            this->ip_check_tasks.pop();
-                        }
-                    }
-
-                    //this will also decrease the counter if its not cached
-                    if (_task != "") this->check_ip(_task);
-                }
-
+                // TODO refresh players in intervall
 
                 //check tasks
                 {
@@ -167,33 +139,6 @@ void RCON::kick_all() {
             this->send_command("kick " + _x.second.number + " Auto Kick!");
         }
     }
-}
-
-void RCON::set_whitelist_enabled(bool _state) {
-    this->whitelist_settings.enable = _state;
-}
-
-void RCON::set_white_list(const std::vector<std::string>& _guids) {
-    std::lock_guard<std::mutex> lock(whitelist_settings.whitelist_mutex);
-    this->whitelist_settings.whitelisted_guids = std::unordered_set<std::string>(_guids.begin(),_guids.end());
-}
-
-void RCON::set_open_slots(int _slots) {
-    this->whitelist_settings.open_slots = _slots;
-}
-
-void RCON::set_white_list_kick_message(const std::string& _msg) {
-    this->whitelist_settings.kick_message = _msg;
-}
-
-void RCON::add_to_whitelist(const std::string& _guid) {
-    std::lock_guard<std::mutex> lock(whitelist_settings.whitelist_mutex);
-    this->whitelist_settings.whitelisted_guids.insert(_guid);
-}
-
-void RCON::remove_from_whitelist(const std::string& _guid) {
-    std::lock_guard<std::mutex> lock(whitelist_settings.whitelist_mutex);
-    this->whitelist_settings.whitelisted_guids.erase(_guid);
 }
 
 std::vector<RconPlayerInfo> RCON::get_players() {
@@ -504,59 +449,55 @@ void RCON::chat_message(const std::string& msg) {
     }
 }
 
+size_t RCON::get_player_count() {
+    std::lock_guard<std::mutex> lock(this->player_mutex);
+    return this->players.size();
+}
+
 void RCON::on_player_connect(const std::string& _player_number, const std::string& _player_name, const std::string& _ip, int _port) {
 
-    //increase player count
-    this->whitelist_settings.current_players++;
-
-    bool _kick = this->is_bad_player_string(_player_name);
-    if (_kick) {
-        this->send_command("kick " + _player_number + " Bad Playername! Only A-Z,a-z,0-9 allowed!");
-    }
-    else {
-        {
-            std::lock_guard<std::mutex> lock(this->player_mutex);
-            RconPlayerInfo _info;
-            try {
-                _info = this->players.at(_player_name);
-            }
-            catch (std::out_of_range& e) {
-                _info.player_name = _player_name;
-            }
-            _info.number = _player_number;
-            _info.ip = _ip;
-            _info.port = _port;
-            this->players.insert_or_assign(_player_name, _info);
+    RconPlayerInfo _info;
+    {
+        std::lock_guard<std::mutex> lock(this->player_mutex);
+        try {
+            _info = this->players.at(_player_name);
         }
-        if (vpn.enable) {
-            std::lock_guard<std::mutex> lock(this->ip_check_tasks_mutex);
-            this->ip_check_tasks.push(_player_name);
+        catch (std::out_of_range& e) {
+            _info.player_name = _player_name;
         }
+        _info.number = _player_number;
+        _info.ip = _ip;
+        _info.port = _port;
+        this->players.insert_or_assign(_player_name, _info);
     }
 
+    if (this->player_connected_callback) {
+        this->player_connected_callback(_info);
+    }
 }
 
 void RCON::on_player_disconnect(const std::string& _player_number, const std::string& _player_name) {
     
-    //increase player count
-    this->whitelist_settings.current_players--;
+    RconPlayerInfo info;
     {
         std::lock_guard<std::mutex> lock(this->player_mutex);
-        this->players.erase(_player_name);
+        try {
+            info = this->players.at(_player_name);
+            this->players.erase(_player_name);
+        } catch (...) {}
     }
 
+    if (this->player_disconnected_callback) {
+        this->player_disconnected_callback(info);
+    }
 }
 
 void RCON::on_player_verified_guid(const std::string& _player_number, const std::string& _player_name, const std::string& _player_guid) {
     
-    bool _kick = this->whitelist_settings.enable && !this->is_whitelisted_player(_player_guid);
-    if (_kick) {
-        this->send_command("kick " + _player_number + " " + this->whitelist_settings.kick_message);
-    }
-    else {
-        
+    RconPlayerInfo _info;
+
+    {
         std::lock_guard<std::mutex> lock(player_mutex);
-        RconPlayerInfo _info;
         try {
             _info = this->players.at(_player_name);
             _info.guid = _player_guid;
@@ -569,11 +510,10 @@ void RCON::on_player_verified_guid(const std::string& _player_number, const std:
             _info.verified = true;
         }
         this->players.insert_or_assign(_player_name, _info);
+    }
 
-        if (this->player_joined_callback) {
-            this->player_joined_callback(_info);
-        }
-
+    if (this->player_verified_callback) {
+        this->player_verified_callback(_info);
     }
 }
 
@@ -699,7 +639,6 @@ void RCON::process_message_players(const std::vector<std::string>& tokens) {
             continue;
         }
 
-
         RconPlayerInfo _info;
         _info.number = player_str.substr(0, _nr_end);
         _info.ip = player_str.substr(_ip_start, _port_delim - _ip_start);
@@ -724,146 +663,30 @@ void RCON::process_message_players(const std::vector<std::string>& tokens) {
             _info.lobby = true;
         }
 
-        //increase player count
-        this->whitelist_settings.current_players++;
-
-        //check name
-        bool kick = this->is_bad_player_string(_info.player_name);
-        if (kick) {
-            this->send_command("kick " + _info.number + " Bad Playername!");
-            continue;
-        }
-
-        //check whitelist
-        if (_info.verified && this->whitelist_settings.enable) {
-            
-            if (!this->is_whitelisted_player(_info.guid)) {
-                this->send_command("kick " + _info.number + " " + this->whitelist_settings.kick_message);
-                continue;
-            }
-        }
-
-
         //insert into lookup
         {
             std::lock_guard<std::mutex> lock(this->player_mutex);
-            this->players.insert_or_assign(_info.player_name, _info);
-        }
 
+            try {
+                auto _prev = this->players.at(_info.player_name);
+                this->players.insert_or_assign(_info.player_name, _info);
 
-        //issue iplookup if needed
-        if (this->vpn.enable) {
-            std::lock_guard<std::mutex> lock(this->ip_check_tasks_mutex);
-            this->ip_check_tasks.push(_info.player_name);
+                // check for missed verified notification
+                if (_info.verified && !_prev.verified) {
+                    this->on_player_verified_guid(_info.number, _info.player_name, _info.guid);
+                }
+            }
+            catch (...) {
+                // no previous --> just joined
+                this->players.insert_or_assign(_info.player_name, _info);
+                this->on_player_connect(_info.number, _info.player_name, _info.ip, _info.port);
+                if (_info.verified) {
+                    this->on_player_verified_guid(_info.number, _info.player_name, _info.guid);
+                }
+            }
+
         }
             
-    }
-}
-
-void RCON::check_ip(const std::string& _player_name) {
-    
-    if (vpn.enable) {
-        RconPlayerInfo _info; 
-    
-        {
-            std::lock_guard<std::mutex> lock(this->player_mutex);
-            try {
-                _info = this->players.at(_player_name);
-            }
-            catch (std::out_of_range& e) {
-                return;
-            }
-        }
-    
-        if (!this->is_vpn_whitelisted_player(_info.guid)) {
-
-            auto _cache_entry = this->check_ip_cache(_info.ip);
-            if (_cache_entry) {
-
-                if (_cache_entry->block == 0) {
-                    //residential -- ok
-                    _info.country = _cache_entry->country;
-                    _info.country_code = _cache_entry->country_code;
-                    _info.isp = _cache_entry->isp;
-                }
-                else if (_cache_entry->block == 1) {
-                    //proxy
-                    this->send_command("kick " + _info.number + " " + this->vpn.kick_message);
-                }
-                else {
-                    //not sure --> suspescious
-                    if (this->vpn.kick_if_suspecious) {
-                        this->send_command("kick " + _info.number + " " + this->vpn.kick_message);
-                    }
-                    else {
-                        _info.country = _cache_entry->country;
-                        _info.country_code = _cache_entry->country_code;
-                        _info.isp = _cache_entry->isp;
-                    }
-                }
-
-            }
-            else {
-
-                this->ip_counter_this_minute--;
-                
-                // Setup HTTP request
-                httplib::Client clt("http://v2.api.iphub.info");
-
-                auto response = clt.Get(("/ip" + _info.ip).c_str());
-
-                if (response->status == 200 && !response->body.empty()) {
-                    /*
-                    {
-                    "ip": "8.8.8.8",
-                    "countryCode": "US",
-                    "countryName": "United States",
-                    "asn": 15169,
-                    "isp": "GOOGLE - Google Inc.",
-                    "block": 1
-                    }
-                    */
-
-                    rapidjson::Document document;
-                    document.Parse(response->body.c_str());
-
-                    auto _ip_info = IPInfo(
-                        document["isp"].GetString(),
-                        document["countryName"].GetString(),
-                        document["countryCode"].GetString(),
-                        document["block"].GetInt()
-                    );
-
-                    {
-                        std::lock_guard<std::mutex> lock(this->vpn.mutex);
-                        this->vpn._ip_cache.insert_or_assign(_info.ip, _ip_info);
-                    }
-
-                    if (_ip_info.block == 0) {
-                        //residential -- ok
-                        _info.country = _ip_info.country;
-                        _info.country_code = _ip_info.country_code;
-                        _info.isp = _ip_info.isp;
-                    }
-                    else if (_ip_info.block == 1) {
-                        //proxy
-                        this->send_command("kick " + _info.number + " " + this->vpn.kick_message);
-                    }
-                    else {
-                        //not sure --> suspescious
-                        if (this->vpn.kick_if_suspecious) {
-                            this->send_command("kick " + _info.number + " " + this->vpn.kick_message);
-                        }
-                        else {
-                            _info.country = _ip_info.country;
-                            _info.country_code = _ip_info.country_code;
-                            _info.isp = _ip_info.isp;
-                        }
-                    }
-
-                }
-            }
-        }
     }
 }
 
@@ -928,55 +751,6 @@ void RCON::process_message_bans(const std::vector<std::string>& tokens) {
 
 }
 
-
-bool RCON::is_bad_player_string(const std::string& player_name) {
-
-    for (int i = 0; i < player_name.length(); i++) {
-        char letter = player_name.at(i);
-        bool isNumber = letter >= '0' && letter <= '9';
-        bool isLetter = isNumber || (letter >= 'A' && letter <= 'Z') || (letter >= 'a' && letter <= 'z');
-        bool isBracket = isLetter || letter == '[' || letter == ']' || letter == ' ';
-        if (!isBracket) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool RCON::is_whitelisted_player(const std::string& player_guid) {
-
-    if (!this->whitelist_settings.enable) return true;
-
-    if (this->whitelist_settings.current_players > this->whitelist_settings.open_slots) {
-        std::lock_guard<std::mutex> lock(this->whitelist_settings.whitelist_mutex);
-        return this->whitelist_settings.whitelisted_guids.count(player_guid) > 0;
-    }
-    else {
-        return true;
-    }
-
-}
-
-bool RCON::is_vpn_whitelisted_player(const std::string& player_guid) {
-
-    std::lock_guard<std::mutex> lock(this->vpn.mutex);
-    return this->vpn.exception_guids.count(player_guid) > 0;
-
-}
-
-std::optional<RCON::IPInfo> RCON::check_ip_cache(const std::string& _ip) {
-
-    std::lock_guard<std::mutex> lock(this->vpn.mutex);
-    try {
-        return this->vpn._ip_cache.at(_ip);
-    }
-    catch (std::out_of_range& e) {
-        return std::nullopt;
-    }
-
-}
-
-
 void RCON::add_task(const RconTaskType& _type, const std::string& _data, bool _repeat, int _seconds, int _initdelay) {
 
     auto _new_task = std::make_shared<Task>();
@@ -1023,31 +797,6 @@ void RCON::enable_auto_reconnect() {
     this->auto_reconnect = true;
 }
 
-void RCON::enable_vpn_detection() {
-    this->vpn.enable = true;
-}
-
-void RCON::set_vpn_detect_kick_msg(const std::string& _msg) {
-    this->vpn.kick_message = _msg;
-}
-
-void RCON::set_iphub_api_key(const std::string& _msg) {
-    this->vpn.api_key = _msg;
-}
-
-void RCON::add_vpn_detection_guid_exception(const std::string& _guid) {
-    std::lock_guard<std::mutex> lock(this->vpn.mutex);
-    this->vpn.exception_guids.insert(_guid);
-}
-
-void RCON::enable_vpn_suspecious_kicks() {
-    this->vpn.kick_if_suspecious = true;
-}
-
-void RCON::set_max_players(int _players) {
-    this->whitelist_settings.max_players = _players;
-}
-
 void RCON::lockServer() {
     this->send_command("#lock");
 }
@@ -1058,4 +807,14 @@ void RCON::unlockServer() {
 
 void RCON::shutdownServer() {
     this->send_command("#shutdown");
+}
+
+void RCON::set_player_connected_callback(const std::function<void(const RconPlayerInfo&)>& callback) {
+    this->player_connected_callback = callback;
+}
+void RCON::set_player_disconnected_callback(const std::function<void(const RconPlayerInfo&)>& callback) {
+    this->player_disconnected_callback = callback;
+}
+void RCON::set_player_verified_callback(const std::function<void(const RconPlayerInfo&)>& callback) {
+    this->player_verified_callback = callback;
 }

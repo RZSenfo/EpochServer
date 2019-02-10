@@ -6,6 +6,7 @@
 
 #include <database/DBManager.hpp>
 #include <RCon/RCON.hpp>
+#include <RCon/Whitelist.hpp>
 #include <SteamAPI/SteamAPI.hpp>
 #include <main.hpp>
 
@@ -25,6 +26,11 @@ private:
     * BattlEye RCON
     **/
     std::shared_ptr<RCON> rcon = nullptr;
+
+    /**
+    * Whitelist and vpn detection
+    **/
+    std::shared_ptr<Whitelist> whitelist = nullptr;
     
     /**
     * Database Access

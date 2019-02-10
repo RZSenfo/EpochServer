@@ -87,73 +87,74 @@ void EpochServer::__setupRCON(const rapidjson::Value& config) {
     auto rconPort = config["port"].GetInt();
     auto rconPassword = config["passsword"].GetString();
 
-    this->rcon = std::make_unique<RCON>(rconIp, rconPort, rconPassword, true);
+    this->rcon = std::make_shared<RCON>(rconIp, rconPort, rconPassword);
 
     if (!config.HasMember("autoreconnect") || config["autoreconnect"].GetBool()) {
         this->rcon->enable_auto_reconnect();
     }
 
+    rcon->start();
+
+
     if (config.HasMember("whitelist") && config["whitelist"].IsObject()) {
+        
+        
         auto whitelistObj = config["whitelist"].GetObject();
         if (whitelistObj.HasMember("enable") && whitelistObj["enable"].GetBool()) {
-            this->rcon->set_whitelist_enabled(true);
+        
+            this->whitelist = std::make_shared<Whitelist>(this->rcon);
                 
             if (whitelistObj.HasMember("players")) {
                 auto list = whitelistObj["players"].GetArray();
                 for (auto itr = list.begin(); itr != list.end(); ++itr) {
-                    rcon->add_to_whitelist(this->__getBattlEyeGUID(itr->GetUint64()));
+                    this->whitelist->add_to_whitelist(this->__getBattlEyeGUID(itr->GetUint64()));
                 }
             }
 
             if (whitelistObj.HasMember("openslots")) {
-                this->rcon->set_open_slots(whitelistObj["openslots"].GetInt());
-            }
-            else {
-                this->rcon->set_open_slots(0);
+                this->whitelist->set_open_slots(whitelistObj["openslots"].GetInt());
             }
 
             if (whitelistObj.HasMember("maxplayers")) {
-                this->rcon->set_max_players(whitelistObj["maxplayers"].GetInt());
+                this->whitelist->set_max_players(whitelistObj["maxplayers"].GetInt());
             }
             else {
-                this->rcon->set_max_players(256);
+                this->whitelist->set_max_players(1024); // imagine that
             }
 
             if (whitelistObj.HasMember("kickmessage")) {
-                this->rcon->set_white_list_kick_message(whitelistObj["kickmessage"].GetString());
+                this->whitelist->set_white_list_kick_message(whitelistObj["kickmessage"].GetString());
             }
             else {
-                this->rcon->set_white_list_kick_message("Whitelist Kick!");
+                this->whitelist->set_white_list_kick_message("Whitelist Kick!");
             }
-        }
-    }
+            this->whitelist->set_whitelist_enabled(true);
 
-    if (config.HasMember("vpndetection") && config["vpndetection"].IsObject()) {
-        auto vpnObj = config["vpndetection"].GetObject();
-        if (vpnObj.HasMember("enable") && vpnObj["enable"].GetBool()) {
-            this->rcon->enable_vpn_detection();
+            if (config.HasMember("vpndetection") && config["vpndetection"].IsObject()) {
+                auto vpnObj = config["vpndetection"].GetObject();
+                if (vpnObj.HasMember("enable") && vpnObj["enable"].GetBool() && vpnObj.HasMember("iphubapikey")) {
+                    
+                    this->whitelist->enable_vpn_detection(
+                        /* api key */ vpnObj["iphubapikey"].GetString(),
+                        /* kicksuspecious */ vpnObj.HasMember("kicksuspecious") && vpnObj["kicksuspecious"].GetBool()
+                    );
 
-            if (vpnObj.HasMember("exceptions")) {
-                auto list = vpnObj["exceptions"].GetArray();
-                for (auto itr = list.begin(); itr != list.end(); ++itr) {
-                    rcon->add_vpn_detection_guid_exception(this->__getBattlEyeGUID(itr->GetUint64()));
+                    if (vpnObj.HasMember("exceptions")) {
+                        auto list = vpnObj["exceptions"].GetArray();
+                        for (auto itr = list.begin(); itr != list.end(); ++itr) {
+                            this->whitelist->add_vpn_detection_guid_exception(this->__getBattlEyeGUID(itr->GetUint64()));
+                        }
+                    }
+
+                    if (vpnObj.HasMember("kickmessage")) {
+                        this->whitelist->set_vpn_detect_kick_msg(vpnObj["kickmessage"].GetString());
+                    }
+                    else {
+                        this->whitelist->set_vpn_detect_kick_msg("Whitelist Kick!");
+                    }
                 }
             }
 
-            if (vpnObj.HasMember("iphubapikey")) {
-                this->rcon->set_iphub_api_key(vpnObj["iphubapikey"].GetString());
-            }
-
-            if (vpnObj.HasMember("kickmessage")) {
-                this->rcon->set_vpn_detect_kick_msg(vpnObj["kickmessage"].GetString());
-            }
-            else {
-                this->rcon->set_vpn_detect_kick_msg("Whitelist Kick!");
-            }
-
-            if (vpnObj.HasMember("kicksuspecious") && vpnObj["kicksuspecious"].GetBool()) {
-                this->rcon->enable_vpn_suspecious_kicks();
-            }
         }
     }
 
@@ -188,7 +189,6 @@ void EpochServer::__setupRCON(const rapidjson::Value& config) {
         }
     }
 
-    rcon->start();
 }
 
 void EpochServer::__setupSteamAPI(const rapidjson::Value& config) {
@@ -230,6 +230,7 @@ std::string EpochServer::getRandomString() {
 }
 
 std::string EpochServer::getUniqueId() {
+    
     auto str = std::to_string(std::chrono::high_resolution_clock::now().time_since_epoch().count()); // 20 chars long
     str.reserve(24);
     static std::random_device rd;
