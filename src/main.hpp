@@ -1,6 +1,8 @@
 #ifndef __EPOCH_MAIN_HPP__
 #define __EPOCH_MAIN_HPP__
 
+#define EXTENSION_VERSION "0.1.0"
+
 // LOGGING
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/rotating_file_sink.h>
