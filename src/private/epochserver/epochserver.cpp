@@ -40,7 +40,7 @@ EpochServer::EpochServer() {
         std::exit(1);
     }
     try {
-        this->__setupBattlEye(d["battleye"]);
+        this->__setupRCON(d["battleye"]);
     }
     catch (std::runtime_error& x) {
         WARNING(x.what());
@@ -49,7 +49,7 @@ EpochServer::EpochServer() {
 
     if (d.HasMember("steamapi") && d["steamapi"].IsObject()) {
         try {
-            this->__setupSteamApi(d["steamapi"]);
+            this->__setupSteamAPI(d["steamapi"]);
         }
         catch (std::runtime_error& x) {
             WARNING(x.what());
@@ -62,12 +62,7 @@ EpochServer::EpochServer() {
        std::exit(1);
     }
     try {
-        for (rapidjson::Value::ConstMemberIterator itr = d["connections"].MemberBegin(); itr != d["connections"].MemberEnd(); ++itr) {
-            this->__setupConnection(
-                itr->name.GetString(),
-                itr->value
-            );
-        }
+        this->dbManager = std::make_unique<DBManager>(d["connections"]);
     }
     catch (std::runtime_error& x) {
         WARNING(x.what());
@@ -76,11 +71,11 @@ EpochServer::EpochServer() {
     
 }
 
-void EpochServer::__setupBattlEye(const rapidjson::Value& config) {
+void EpochServer::__setupRCON(const rapidjson::Value& config) {
 
     if (!config.HasMember("enable")) throw std::runtime_error("Undefined value: \"enable\" in battleye section");
     
-    if (!(this->rconEnabled = config["enable"].GetBool())) {
+    if (!config["enable"].GetBool()) {
         return;
     }
     
@@ -88,16 +83,11 @@ void EpochServer::__setupBattlEye(const rapidjson::Value& config) {
     if (!config.HasMember("port")) throw std::runtime_error("Undefined value: \"port\" in battleye section");
     if (!config.HasMember("password")) throw std::runtime_error("Undefined value: \"password\" in battleye section");
 
-    this->rconIp = config["ip"].GetString();
-    this->rconPort = config["port"].GetInt();
-    this->rconPassword = config["passsword"].GetString();
+    auto rconIp = config["ip"].GetString();
+    auto rconPort = config["port"].GetInt();
+    auto rconPassword = config["passsword"].GetString();
 
-    this->rcon = std::make_unique<RCON>(
-        this->rconIp,
-        this->rconPort,
-        this->rconPassword,
-        true
-    );
+    this->rcon = std::make_unique<RCON>(rconIp, rconPort, rconPassword, true);
 
     if (!config.HasMember("autoreconnect") || config["autoreconnect"].GetBool()) {
         this->rcon->enable_auto_reconnect();
@@ -201,7 +191,7 @@ void EpochServer::__setupBattlEye(const rapidjson::Value& config) {
     rcon->start();
 }
 
-void EpochServer::__setupSteamApi(const rapidjson::Value& config) {
+void EpochServer::__setupSteamAPI(const rapidjson::Value& config) {
     if (!config.HasMember("enable")) throw std::runtime_error("Undefined value: \"enable\" in steamapi section");
     
     if (!config["enable"].GetBool()) {
@@ -212,235 +202,17 @@ void EpochServer::__setupSteamApi(const rapidjson::Value& config) {
     if (apikey.empty()) {
         throw std::runtime_error("Steam API key must be set if you want to use this feature");
     }
+    this->steamApi = std::make_shared<SteamAPI>(apikey);
 
-    this->steamApi = std::make_unique<SteamAPI>(apikey);
+    this->steamApi->setSteamApiLogLevel(config.HasMember("loglevel") ? config["loglevel"].GetInt() : 0);
+    this->steamApi->setMinDaysSinceLastVacBan(config.HasMember("mindayssincelastban") ? config["mindayssincelastban"].GetInt() : -1);
+    this->steamApi->setKickVacBanned(config.HasMember("kickvacbanned") ? config["kickvacbanned"].GetBool() : false);
+    this->steamApi->setMinAccountAge(config.HasMember("minaccountage") ? config["minaccountage"].GetInt() : -1);
+    this->steamApi->setMaxVacBans(config.HasMember("maxvacbans") ? config["maxvacbans"].GetInt() : -1);
 
-    this->steamApiLogLevel = config.HasMember("loglevel") ? config["loglevel"].GetInt() : 0;
-    this->minDaysSinceLastVacBan = config.HasMember("mindayssincelastban") ? config["mindayssincelastban"].GetInt() : -1;
-    this->kickVacBanned = config.HasMember("kickvacbanned") ? config["kickvacbanned"].GetBool() : false;
-    this->minAccountAge = config.HasMember("minaccountage") ? config["minaccountage"].GetInt() : -1;
 }
 
-void EpochServer::__setupConnection(const std::string& name, const rapidjson::Value& config) {
-    
-    if (config.HasMember("enable") && !config["enable"].GetBool()) {
-        return;
-    }
-    
-    DBConfig dbConf;
-    
-    if (!config.HasMember("type")) throw std::runtime_error("Undefined connection value: \"type\" in " + name);
-    std::string type = config["type"].GetString();
-    
-    
-    if (utils::iequals(type, "mysql")) {
-
-        if (!config.HasMember("database")) throw std::runtime_error("Undefined connection value: \"database\" in " + name);
-        
-        dbConf.dbType = DBType::MY_SQL;
-        dbConf.ip = config.HasMember("ip") ? config["ip"].GetString() : "127.0.0.1";
-        dbConf.password = config.HasMember("password") ? config["password"].GetString() : "";
-        dbConf.user = config.HasMember("username") ? config["username"].GetString() : "root";;
-        dbConf.port = config.HasMember("port") ? config["port"].GetInt() : 3306;
-        dbConf.dbname = config["database"].GetString();
-    }
-    else if (utils::iequals(type, "redis")) {
-
-        if (!config.HasMember("password")) throw std::runtime_error("Undefined connection value: \"password\" in " + name);
-        if (!config.HasMember("database")) throw std::runtime_error("Undefined connection value: \"database\" in " + name);
-
-        dbConf.dbType = DBType::REDIS;
-        dbConf.ip = config.HasMember("ip") ? config["ip"].GetString() : "127.0.0.1";
-        dbConf.port = config.HasMember("port") ? config["port"].GetInt() : 6379;
-        dbConf.password = config.HasMember("password") ? config["password"].GetString() : "";
-    }
-    else if (utils::iequals(type, "sqlite")) {
-        
-        if (!config.HasMember("database")) throw std::runtime_error("Undefined connection value: \"database\" in " + name);
-
-        dbConf.dbType = DBType::SQLITE;
-        dbConf.dbname = config["database"].GetString();
-    }
-    else {
-        throw std::runtime_error("Unknown database type: \"" + type + "\" in " + name);
-    }
-    
-    dbConf.connectionName = name;
-    
-    if (config.HasMember("statements") && config["statements"].IsObject()) {
-        for (auto itr = config["statements"].MemberBegin(); itr != config["statements"].MemberEnd(); ++itr) {
-            std::string statementName = itr->name.GetString();
-            auto statementBody = itr->value.GetObject();
-
-            if (!statementBody.HasMember("query")) throw std::runtime_error("Undefined statement value: \"query\" in " + name + "." + statementName);
-            if (!statementBody.HasMember("params")) throw std::runtime_error("Undefined statement value: \"params\" in " + name + "." + statementName);
-            if (!statementBody.HasMember("result")) throw std::runtime_error("Undefined statement value: \"result\" in " + name + "." + statementName);
-
-            DBSQLStatementTemplate statement;
-            statement.statementName = statementName;
-            statement.query = statementBody["query"].GetString();
-            statement.isInsert = statementBody.HasMember("isinsert") && statementBody["isinsert"].GetBool();
-
-            auto paramslist = statementBody["params"].GetArray();
-            statement.params.reserve(paramslist.Size());
-            for (auto itr = paramslist.begin(); itr != paramslist.end(); ++itr) {
-                auto typeStr = itr->GetString();
-                if (typeStr == "number") {
-                    statement.params.emplace_back(DBSQLStatementParamType::DB_NUMBER);
-                }
-                else if (typeStr == "array") {
-                    statement.params.emplace_back(DBSQLStatementParamType::DB_ARRAY);
-                }
-                else if (typeStr == "bool") {
-                    statement.params.emplace_back(DBSQLStatementParamType::DB_BOOL);
-                }
-                else if (typeStr == "string") {
-                    statement.params.emplace_back(DBSQLStatementParamType::DB_STRING);
-                }
-                else {
-                    throw std::runtime_error("Unknown type in params types of " + statementName);
-                }
-            }
-
-            auto resultslist = statementBody["results"].GetArray();
-            statement.result.reserve(resultslist.Size());
-            for (auto itr = resultslist.begin(); itr != resultslist.end(); ++itr) {
-                auto typeStr = itr->GetString();
-                if (typeStr == "number") {
-                    statement.result.emplace_back(DBSQLStatementParamType::DB_NUMBER);
-                }
-                else if (typeStr == "array") {
-                    statement.result.emplace_back(DBSQLStatementParamType::DB_ARRAY);
-                }
-                else if (typeStr == "bool") {
-                    statement.result.emplace_back(DBSQLStatementParamType::DB_BOOL);
-                }
-                else if (typeStr == "string") {
-                    statement.result.emplace_back(DBSQLStatementParamType::DB_STRING);
-                }
-                else {
-                    throw std::runtime_error("Unknown type in result types of " + statementName);
-                }
-            }
-
-            dbConf.statements.emplace_back(statement);
-        }
-    }
-
-    this->dbWorkers.emplace_back(
-        std::pair< std::string, std::shared_ptr<DBWorker> >( name, std::make_shared<DBWorker>(dbConf) )
-    );
-    
-}
-
-EpochServer::~EpochServer() {
-    
-}
-
-bool EpochServer::initPlayerCheck(const std::string& steamIdStr) {
-
-    auto _steamId = std::stoull(steamIdStr);
-    {
-        std::shared_lock<std::shared_mutex> lock(this->checkedSteamIdsMutex);
-        // already looked up
-        if (std::find(this->checkedSteamIds.begin(), this->checkedSteamIds.end(), _steamId) != this->checkedSteamIds.end()) {
-            return true;
-        }
-    }
-    bool kick = false;
-
-    // SteamAPI is set up
-    if (this->steamApi) {
-        
-        auto bans = this->steamApi->GetPlayerBans(steamIdStr);
-
-        // VAC check
-        if (bans.NumberOfGameBans > 0) {
-            if (this->steamApiLogLevel >= 2) {
-                std::stringstream log;
-                log << "[SteamAPI] VAC check " << _steamId << std::endl;
-                log << "- VACBanned: " << (bans.VACBanned ? "true" : "false") << std::endl;
-                log << "- NumberOfVACBans: " << bans.NumberOfGameBans;
-                INFO(log.str());
-            }
-
-            if (!kick && this->kickVacBanned && bans.VACBanned) {
-                if (this->steamApiLogLevel >= 1) {
-                    std::stringstream log;
-                    log << "[SteamAPI] VAC ban " << _steamId << std::endl;
-                    log << "- VACBanned: " << (bans.VACBanned ? "true" : "false");
-                    INFO(log.str());
-                }
-
-                this->beBan(this->__getBattlEyeGUID(_steamId), "VAC Ban", -1);
-                kick = true;
-            }
-            if (!kick && this->minDaysSinceLastVacBan > 0 && bans.DaysSinceLastBan < this->minDaysSinceLastVacBan) {
-                if (this->steamApiLogLevel >= 1) {
-                    std::stringstream log;
-                    log << "[SteamAPI] VAC ban " << _steamId << std::endl;
-                    log << "- DaysSinceLastBan: " << bans.DaysSinceLastBan;
-                    INFO(log.str());
-                }
-
-                this->beBan(this->__getBattlEyeGUID(_steamId), "VAC Ban", -1);
-                kick = true;
-            }
-            if (!kick && this->maxVacBans > 0 && bans.NumberOfGameBans >= this->maxVacBans) {
-                if (this->steamApiLogLevel >= 1) {
-                    std::stringstream log;
-                    log << "[SteamAPI] VAC ban " << _steamId << std::endl;
-                    log << "- NumberOfVACBans: " << bans.NumberOfGameBans;
-                    INFO(log.str());
-                }
-
-                this->beBan(this->__getBattlEyeGUID(_steamId), "VAC Ban", -1);
-                kick = true;
-            }
-        }
-
-        // Player check
-        auto summary = this->steamApi->GetPlayerSummaries(steamIdStr);
-        if (!kick) {
-            if (this->steamApiLogLevel >= 2) {
-                std::stringstream log;
-                log << "[SteamAPI] Player check " << _steamId << std::endl;
-                log << "- timecreated: " << summary.timecreated;
-                INFO(log.str());
-            }
-
-            if (!kick && this->minAccountAge > 0 && summary.timecreated > -1) {
-                std::time_t currentTime = std::time(0);
-                int age = currentTime - summary.timecreated;
-                age /= (24 * 60 * 60);
-
-                if (age > 0 && age < this->minAccountAge) {
-                    if (this->steamApiLogLevel >= 1) {
-                        std::stringstream log;
-                        log << "[SteamAPI] Player ban " << _steamId << std::endl;
-                        log << "- timecreated: " << summary.timecreated << std::endl;
-                        log << "- current: " << currentTime;
-                        INFO(log.str());
-                    }
-
-                    this->beBan(this->__getBattlEyeGUID(_steamId), "Account not old enough", -1);
-                    kick = true;
-                }
-            }
-        }
-
-        // Not kick -> fine
-        if (!kick) {
-            std::unique_lock<std::shared_mutex> lock(this->checkedSteamIdsMutex);
-            this->checkedSteamIds.push_back(_steamId);
-        }
-        else {
-            this->beKick(steamIdStr);
-        }
-    }
-
-    return !kick;
-}
+EpochServer::~EpochServer() {}
 
 std::string EpochServer::getRandomString() {
     static std::random_device rd;
@@ -454,6 +226,21 @@ std::string EpochServer::getRandomString() {
     for (int i = 0; i < strLen; i++) {
         str += static_cast<char>(dis(gen));
     }
+    return str;
+}
+
+std::string EpochServer::getUniqueId() {
+    auto str = std::to_string(std::chrono::high_resolution_clock::now().time_since_epoch().count()); // 20 chars long
+    str.reserve(24);
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+
+    std::uniform_int_distribution<> dis('0', '9');
+    str += static_cast<char>(dis(gen));
+    str += static_cast<char>(dis(gen));
+    str += static_cast<char>(dis(gen));
+    str += static_cast<char>(dis(gen));
+
     return str;
 }
 
@@ -503,61 +290,8 @@ std::string EpochServer::__getBattlEyeGUID(uint64 _steamId) {
     return MD5(bestring.str()).hexdigest();
 }
 
-// Battleye / RCON Integration
-
-void EpochServer::beBroadcastMessage(const std::string& msg) {
-    if (msg.empty() || !this->rcon) {
-        return;
-    }
-    this->rcon->send_global_msg(msg);
-}
-
-void EpochServer::beKick(const std::string& playerGUID) {
-    if (playerGUID.empty() || !this->rcon) {
-        return;
-    }
-    this->rcon->kick(playerGUID);
-}
-
-void EpochServer::beBan(const std::string& playerUID, const std::string& msg, int duration) {
-    if (playerUID.empty() || msg.empty() || !this->rcon) {
-        return;
-    }
-     
-    this->rcon->add_ban(playerUID, msg, duration);
-}
-
-void EpochServer::beShutdown() {
-    
-    // TODO maybe differently?
-    std::exit(0);
-}
-
-void EpochServer::beLock() {
-    if (!this->rcon) {
-        return;
-    }
-    this->rcon->send_command("#lock");
-}
-
-void EpochServer::beUnlock() {
-    if (!this->rcon) {
-        return;
-    }
-    this->rcon->send_command("#unlock");
-}
-
 void EpochServer::log(const std::string& log) {
     INFO(log);
-}
-
-std::shared_ptr<DBWorker> EpochServer::__getDbWorker(const std::string& name) {
-    for (auto& x : this->dbWorkers) {
-        if (x.first == name) {
-            return x.second;
-        }
-    }
-    throw std::runtime_error("No worker found for name: " + name);
 }
 
 #define SET_RESULT(x,y) outCode = x; out = y;
@@ -572,98 +306,186 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
 
     try {
         if (fncLen == 3) {
-            /* TODO Function codes
-            switch (function[0]) {
-            // db
-            case '1': {
-                bool async = function[2] == '1';
-                switch (function[1]) {
-                    // Poll
-                    case '0': {
-                        break;
-                    }
-                    // get
-                    case '1': {
-                        if (argsCnt < 2) throw std::runtime_error("Not enough args given for get");
-                        auto &worker = this->__getDbWorker(args[0]);
-                        unsigned long id = worker->get<DBExecutionType::ASYNC_POLL>(args[1]);
-                        SET_RESULT(0, std::to_string(id));
-                        break;
-                    }
-                    // getTtl
-                    case '2': {
-                        break;
-                    }
-                    // set
-                    case '3': {
-                        break;
-                    }
-                    // setEx
-                    case '4': {
-                        break;
-                    }
-                    // query
-                    case '5': {
-                        break;
-                    }
-                    // Exists
-                    case '6': {
-                        break;
-                    }
-                    // Expire
-                    case '7': {
-                        break;
-                    }
-                    // del
-                    case '8': {
-                        break;
-                    }
-                    // getRange
-                    case '9': {
-                        break;
-                    }
-                default: { SET_RESULT(1, "Unknown function"); }
-                };
-                break;
-            }
-            //be
-            case '2': {
-                break;
-            }
-            // 3-9 TODO
-            // util
+            this->callExtensionEntrypointByNumber(out, outCode, function, args, argsCnt);
+        }
+        else if (!strncmp(function, "db", 2)) {
+            this->dbEntrypoint(out, outCode, function, args, argsCnt);
+        }
+        else if (!strncmp(function, "be", 2)) {
+            this->beEntrypoint(out, outCode, function, args, argsCnt);
+        }
+        else if (!strcmp(function, "playerCheck")) {
+            this->callExtensionEntrypointByNumber(out, outCode, "300", args, argsCnt);
+        }
+        else if (!strcmp(function, "extLog")) {
+            this->callExtensionEntrypointByNumber(out, outCode, "910", args, argsCnt);
+        }
+        else if (!strcmp(function, "getCurrentTime")) {
+            this->callExtensionEntrypointByNumber(out, outCode, "000", args, argsCnt);
+        }
+        else if (!strcmp(function, "getRandomString")) {
+            this->callExtensionEntrypointByNumber(out, outCode, "010", args, argsCnt);
+        }
+        else if (!strcmp(function, "getStringMd5")) {
+            this->callExtensionEntrypointByNumber(out, outCode, "020", args, argsCnt);
+        }
+        else if (!strcmp(function, "version")) {
+            this->callExtensionEntrypointByNumber(out, outCode, "900", args, argsCnt);
+        }
+        else {
+            SET_RESULT(1, "Unknown function");
+        }
+    }
+    catch (std::exception& e) {
+        SET_RESULT(outCode ? outCode : 1, static_cast<std::string>("Error occured: ") + e.what());
+    }
+
+    strncpy_s(output, outputSize, out.c_str(), _TRUNCATE);
+    return outCode;
+}
+
+void EpochServer::callExtensionEntrypointByNumber(std::string& out, int& outCode, const char *function, const char **args, int argsCnt) {
+    switch (function[0]) {
+    // db
+    case '1': {
+        this->dbEntrypoint(out, outCode, function, args, argsCnt);
+        break;
+    }
+    // be
+    case '2': {
+        this->beEntrypoint(out, outCode, function, args, argsCnt);
+        break;
+    }
+    // steamapi
+    case '3': {
+        switch (function[1]) {
+            // playercheck
             case '0': {
+                if (argsCnt < 1) throw std::runtime_error("No playerid given to check");
+                if (strlen(args[0]) != 17) throw std::runtime_error("Playerid is not a steam64id. Length mismatch");
+                if (!this->steamApi) {
+                    SET_RESULT(1, "STEAMAPI NOT AVAILABLE");
+                    return;
+                }
+                if (!this->rcon) {
+                    SET_RESULT(1, "RCON NOT AVAILABLE");
+                    return;
+                }
+                threadpool->fireAndForget([this, x = std::move(std::string(args[0]))]() {
+                    std::string err;
+                    if (this->steamApi && this->rcon && !this->steamApi->initialPlayerCheck(x, err)) {
+                        this->rcon->add_ban(this->__getBattlEyeGUID(std::stoull(x)));
+                        this->rcon->kick(this->__getBattlEyeGUID(std::stoull(x)));
+                    }
+                });
                 break;
             }
             default: { SET_RESULT(1, "Unknown function"); }
-            };
-            */
         }
-        else if (!strncmp(function, "db", 2)) {
-            // skip prefix TODO test encoding.. might need to skipp more bytes
-            function += 2;
+        break;
+    }
+    
+    /////////////////////////////
+    // 4-8 TODO
+    /////////////////////////////
 
-            if (!strcmp(function, "Poll")) {
+
+    // util
+    case '0': {
+        switch (function[1]) {
+            // current time
+            case '0': {
+                SET_RESULT(0, this->getCurrentTime());
+                break;
+            }
+            // random string
+            case '1': {
+                SET_RESULT(0, this->getRandomString());
+                break;
+            }
+            // string md5
+            case '2': {
+                if (argsCnt < 1) throw std::runtime_error("No string to hash was given");
+                SET_RESULT(0, this->getStringMd5(args[0]));
+                break;
+            }
+            default: { SET_RESULT(1, "Unknown function"); }
+        }
+        break;
+    }
+    // extension info
+    case '9': {
+        switch (function[1]) {
+            // version
+            case '0': {
+                SET_RESULT(0, EXTENSION_VERSION);
+                break;
+            }
+            // log
+            case '1': {
+                if (argsCnt < 1) throw std::runtime_error("Nothing to log was provided");
+
+                std::string msg = args[0];
+                for (int i = 1; i < argsCnt; ++i) {
+                    msg += "\n";
+                    msg += args[i];
+                }
+
+                threadpool->fireAndForget([x = std::move(msg)]() {
+                    INFO(x);
+                });
+                break;
+            }
+            default: { SET_RESULT(1, "Unknown function"); }
+        }
+        break;
+    }
+    default: { SET_RESULT(1, "Unknown function"); }
+    };
+}
+
+void EpochServer::dbEntrypoint(std::string& out, int& outCode, const char *function, const char **args, int argsCnt) {
+    
+    if (strlen(function) == 3) {
+        switch(function[1]) {
+            // Poll
+            case '0': {
                 if (argsCnt < 2 || strlen(args[0]) == 0 || strlen(args[1]) == 0) {
                     throw std::runtime_error("Invalid args for dbPoll");
                 }
 
-                auto &worker = this->__getDbWorker(args[0]);
-
-                if (!worker) throw std::runtime_error(static_cast<std::string>("Database connection not found: ") + args[0]);
-
                 unsigned long id = std::stoul(args[1]);
 
                 try {
-                    auto res = worker->tryPopResult(id);
+                    auto res = dbManager->tryPopResult(args[0], id);
                     if (res.index() == 0) {
                         SET_RESULT(0, std::get<std::string>(res));
                     }
                     else if (res.index() == 1) {
                         SET_RESULT(0, std::to_string(std::get<bool>(res)));
                     }
-                    else {
+                    else if (res.index() == 2) {
                         SET_RESULT(0, std::to_string(std::get<int>(res)));
+                    }
+                    else if (res.index() == 3) {
+                        auto result = std::get< std::pair<std::string, int> >(res);
+                        SET_RESULT(0, "[" + result.first + "," + std::to_string(result.second) + "]");
+                    }
+                    else if (res.index() == 4) {
+                        auto result = std::get< std::vector<std::string> >(res);
+                        std::string str;
+                        if (result.empty()) {
+                            str = "[]";
+                        }
+                        else {
+                            str = "[";
+                            for (auto& x : result) {
+                                str += x;
+                                str += ',';
+                            }
+                            str[str.length() - 1] = ']';
+                        }
+                        SET_RESULT(0, str);
                     }
                 }
                 catch (std::invalid_argument& e) {
@@ -677,121 +499,175 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
                     outCode = 3;
                     throw std::runtime_error(std::string("Error occured for request: ") + ex.what());
                 }
-            }
-            else if (!strcmp(function, "Get")) {
+                break;
+            };
+            // get
+            case '1': {
                 if (argsCnt < 2) throw std::runtime_error("Not enough args given for get");
-                auto &worker = this->__getDbWorker(args[0]);
-
-                unsigned long id = worker->get<DBExecutionType::ASYNC_POLL>(args[1]);
+                unsigned long id = this->dbManager->get<DBExecutionType::ASYNC_POLL>(args[0], args[1]);
                 SET_RESULT(0, std::to_string(id));
-
-            }
-            else if (!strcmp(function, "Exists")) {
-                if (argsCnt < 2) throw std::runtime_error("Not enough args given for exists");
-                auto &worker = this->__getDbWorker(args[0]);
-
-                unsigned long id = worker->exists<DBExecutionType::ASYNC_POLL>(args[1]);
-                SET_RESULT(0, std::to_string(id));
-            }
-            else if (!strcmp(function, "Set")) {
-                if (argsCnt < 3) throw std::runtime_error("Not enough args given for set");
-                auto &worker = this->__getDbWorker(args[0]);
-                worker->set<DBExecutionType::ASYNC_CALLBACK>(args[1], args[2], std::nullopt, std::nullopt);
-            }
-            else if (!strcmp(function, "SetEx")) {
-                if (argsCnt < 4) throw std::runtime_error("Not enough args given for setEx");
-                auto &worker = this->__getDbWorker(args[0]);
-                int ttl = std::stoi(args[2]);
-                worker->setEx<DBExecutionType::ASYNC_CALLBACK>(args[1], ttl, args[3], std::nullopt, std::nullopt);
-            }
-            else if (!strcmp(function, "Expire")) {
-                if (argsCnt < 2) throw std::runtime_error("Not enough args given for expire");
-                auto &worker = this->__getDbWorker(args[0]);
-                int ttl = std::stoi(args[2]);
-                worker->expire<DBExecutionType::ASYNC_CALLBACK>(args[1], ttl, std::nullopt, std::nullopt);
-            }
-            else if (!strcmp(function, "Del")) {
-                if (argsCnt < 2) throw std::runtime_error("Not enough args given for del");
-                auto &worker = this->__getDbWorker(args[0]);
-                worker->del<DBExecutionType::ASYNC_CALLBACK>(args[1], std::nullopt, std::nullopt);
-            }
-            else if (!strcmp(function, "Query")) {
-                // TODO
-                SET_RESULT(1, "TODO");
-            }
-            else if (!strcmp(function, "GetTtl")) {
+                break;
+            };
+            // getTtl
+            case '2': {
                 if (argsCnt < 2) throw std::runtime_error("Not enough args given for getTtl");
-                auto &worker = this->__getDbWorker(args[0]);
-
-                unsigned long id = worker->getWithTtl<DBExecutionType::ASYNC_POLL>(args[1]);
+                unsigned long id = this->dbManager->getWithTtl<DBExecutionType::ASYNC_POLL>(args[0], args[1]);
                 SET_RESULT(0, std::to_string(id));
-            }
-            else if (!strcmp(function, "SetSync")) {
+                break;
+            };
+            // set
+            case '3': {
                 if (argsCnt < 3) throw std::runtime_error("Not enough args given for set");
-                auto &worker = this->__getDbWorker(args[0]);
-
-                unsigned long id = worker->set<DBExecutionType::ASYNC_POLL>(args[1], args[2]);
-                SET_RESULT(0, std::to_string(id));
-            }
-            else if (!strcmp(function, "SetExSync")) {
+                this->dbManager->set<DBExecutionType::ASYNC_CALLBACK>(args[0], args[1], args[2], std::nullopt, std::nullopt);
+                break;
+            };
+            // setEx
+            case '4': {
                 if (argsCnt < 4) throw std::runtime_error("Not enough args given for setEx");
-                auto &worker = this->__getDbWorker(args[0]);
                 int ttl = std::stoi(args[2]);
-                unsigned long id = worker->setEx<DBExecutionType::ASYNC_POLL>(args[1], ttl, args[3]);
+                this->dbManager->setEx<DBExecutionType::ASYNC_CALLBACK>(args[0], args[1], ttl, args[3], std::nullopt, std::nullopt);
+                break;
+            };
+            // query
+            case '5': {
+                break;
+            };
+            // Exists
+            case '6': {
+                if (argsCnt < 2) throw std::runtime_error("Not enough args given for exists");
+                unsigned long id = this->dbManager->exists<DBExecutionType::ASYNC_POLL>(args[0], args[1]);
                 SET_RESULT(0, std::to_string(id));
-            }
-            else if (!strcmp(function, "ExpireSync")) {
+                break;
+            };
+            // Expire
+            case '7': {
                 if (argsCnt < 2) throw std::runtime_error("Not enough args given for expire");
-                auto &worker = this->__getDbWorker(args[0]);
-
                 int ttl = std::stoi(args[2]);
-                unsigned long id = worker->expire<DBExecutionType::ASYNC_POLL>(args[1], ttl);
-                SET_RESULT(0, std::to_string(id));
-            }
-            else if (!strcmp(function, "DelSync")) {
+                this->dbManager->expire<DBExecutionType::ASYNC_CALLBACK>(args[0], args[1], ttl, std::nullopt, std::nullopt);
+                break;
+            };
+            // del
+            case '8': {
                 if (argsCnt < 2) throw std::runtime_error("Not enough args given for del");
-                auto &worker = this->__getDbWorker(args[0]);
-
-                unsigned long id = worker->del<DBExecutionType::ASYNC_POLL>(args[1]);
-                SET_RESULT(0, std::to_string(id));
-            }
-            else if (!strcmp(function, "GetRange")) {
+                this->dbManager->del<DBExecutionType::ASYNC_CALLBACK>(args[0], args[1], std::nullopt, std::nullopt);
+                break;
+            };
+            // getRange
+            case '9': {
                 if (argsCnt < 4) throw std::runtime_error("Not enough args given for getRange");
-                auto &worker = this->__getDbWorker(args[0]);
-
                 unsigned long from, to;
                 from = std::stoul(args[2]);
                 to = std::stoul(args[3]);
-                unsigned long id = worker->getRange<DBExecutionType::ASYNC_POLL>(args[1], from, to);
+                unsigned long id = this->dbManager->getRange<DBExecutionType::ASYNC_POLL>(args[0], args[1], from, to);
                 SET_RESULT(0, std::to_string(id));
-            }
-            else if (!strcmp(function, "Ping")) {
-                auto &worker = this->__getDbWorker(args[0]);
+                break;
+            };
+            default: { SET_RESULT(1, "Unknown function"); };
+        };
+    }
+    else {
+        // skip prefix TODO test encoding.. might need to skipp more bytes
+        function += 2;
 
-                unsigned long id = worker->ping<DBExecutionType::ASYNC_POLL>();
-                SET_RESULT(0, std::to_string(id));
-            }
-            else {
-                SET_RESULT(1, "Unknown db command");
-            }
+        if (!strcmp(function, "Poll")) {
+            // 0
+            this->dbEntrypoint(out, outCode, "100", args, argsCnt);
         }
-        else if (!strncmp(function, "be", 2)) {
-            if (!strcmp(function, "beBroadcastMessage")) {
-                //(const std::string& message);
+        else if (!strcmp(function, "Get")) {
+            // 1
+            this->dbEntrypoint(out, outCode, "110", args, argsCnt);
+        }
+        else if (!strcmp(function, "Exists")) {
+            // 6
+            this->dbEntrypoint(out, outCode, "160", args, argsCnt);
+        }
+        else if (!strcmp(function, "Set")) {
+            // 3
+            this->dbEntrypoint(out, outCode, "130", args, argsCnt);
+        }
+        else if (!strcmp(function, "SetEx")) {
+            // 4
+            this->dbEntrypoint(out, outCode, "140", args, argsCnt);
+        }
+        else if (!strcmp(function, "Expire")) {
+            // 7
+            this->dbEntrypoint(out, outCode, "170", args, argsCnt);
+        }
+        else if (!strcmp(function, "Del")) {
+            // 8
+            this->dbEntrypoint(out, outCode, "180", args, argsCnt);
+        }
+        else if (!strcmp(function, "Query")) {
+            // TODO
+            SET_RESULT(1, "TODO");
+        }
+        else if (!strcmp(function, "GetTtl")) {
+            // 2
+            this->dbEntrypoint(out, outCode, "120", args, argsCnt);
+        }
+        else if (!strcmp(function, "SetSync")) {
+            if (argsCnt < 3) throw std::runtime_error("Not enough args given for set");
+            unsigned long id = this->dbManager->set<DBExecutionType::ASYNC_POLL>(args[0], args[1], args[2]);
+            SET_RESULT(0, std::to_string(id));
+        }
+        else if (!strcmp(function, "SetExSync")) {
+            if (argsCnt < 4) throw std::runtime_error("Not enough args given for setEx");
+            int ttl = std::stoi(args[2]);
+            unsigned long id = this->dbManager->setEx<DBExecutionType::ASYNC_POLL>(args[0], args[1], ttl, args[3]);
+            SET_RESULT(0, std::to_string(id));
+        }
+        else if (!strcmp(function, "ExpireSync")) {
+            if (argsCnt < 2) throw std::runtime_error("Not enough args given for expire");
+            int ttl = std::stoi(args[2]);
+            unsigned long id = this->dbManager->expire<DBExecutionType::ASYNC_POLL>(args[0], args[1], ttl);
+            SET_RESULT(0, std::to_string(id));
+        }
+        else if (!strcmp(function, "DelSync")) {
+            if (argsCnt < 2) throw std::runtime_error("Not enough args given for del");
+            unsigned long id = this->dbManager->del<DBExecutionType::ASYNC_POLL>(args[0], args[1]);
+            SET_RESULT(0, std::to_string(id));
+        }
+        else if (!strcmp(function, "GetRange")) {
+            // 9
+            this->dbEntrypoint(out, outCode, "190", args, argsCnt);
+        }
+        else if (!strcmp(function, "Ping")) {
+            unsigned long id = this->dbManager->ping<DBExecutionType::ASYNC_POLL>(args[0]);
+            SET_RESULT(0, std::to_string(id));
+        }
+        else {
+            SET_RESULT(1, "Unknown db command");
+        }
+    }
+}
+
+void EpochServer::beEntrypoint(std::string& out, int& outCode, const char *function, const char **args, int argsCnt) {
+    
+    if (!this->rcon) {
+        SET_RESULT(1, "RCON NOT AVAILABLE");
+        return;
+    }
+
+    if (strlen(function) == 3) {
+        switch (function[1]) {
+            // broadcast
+            case '0': {
                 if (argsCnt < 1) throw std::runtime_error("Missing message param for beBroadcastMessage");
                 threadpool->fireAndForget([this, x = std::string(args[0])]() {
-                    this->beBroadcastMessage(x);
+                    this->rcon->send_global_msg(x);
                 });
+                break;
             }
-            else if (!strcmp(function, "beKick")) {
-                //(const std::string& playerGUID);
+            // kick
+            case '1': {
                 if (argsCnt < 1) throw std::runtime_error("Missing guid param in beKick");
                 threadpool->fireAndForget([this, x = std::string(args[0])]() {
-                    this->beKick(x);
+                    this->rcon->kick(x);
                 });
+                break;
             }
-            else if (!strcmp(function, "beBan")) {
-                // (const std::string& playerGUID, const std::string& message, int duration);
+            // ban
+            case '2': {
                 if (argsCnt < 1) throw std::runtime_error("Missing params for beBan");
                 std::string msg = argsCnt > 1 ? args[1] : "BE Ban";
                 if (msg.empty()) msg = "BE Ban";
@@ -805,70 +681,55 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
                     }
                 }
                 threadpool->fireAndForget([this, uid = std::string(args[0]), msg = std::move(msg), dur]() {
-                    this->beBan(uid, msg, dur);
+                    this->rcon->add_ban(uid, msg, dur);
                 });
+                break;
             }
-            else if (!strcmp(function, "beShutdown")) {
-                this->beShutdown();
-            }
-            else if (!strcmp(function, "beLock")) {
+            // lock
+            case '3': {
                 threadpool->fireAndForget([this]() {
-                    this->beLock();
+                    this->rcon->lockServer();
                 });
+                break;
             }
-            else if (!strcmp(function, "beUnlock")) {
+            // unlock
+            case '4': {
                 threadpool->fireAndForget([this]() {
-                    this->beUnlock();
+                    this->rcon->unlockServer();
                 });
+                break;
             }
-            else {
+            // shutdown
+            case '5': {
+                this->rcon->shutdownServer();
+                break;
+            }
+            default: {
                 SET_RESULT(1, "Unknown be command");
             }
         }
-        else if (!strcmp(function, "extLog")) {
-            if (argsCnt < 1) throw std::runtime_error("Nothing to log was provided");
-            
-            std::string msg = args[0];
-            for (int i = 1; i < argsCnt; ++i) {
-                msg += "\n";
-                msg += args[i];
-            }
-
-            threadpool->fireAndForget([x = std::move(msg)]() {
-                INFO(x);
-            });
+    }
+    else {
+        if (!strcmp(function, "beBroadcastMessage")) {
+            this->beEntrypoint(out, outCode, "200", args, argsCnt);
         }
-        else if (!strcmp(function, "playerCheck")) {
-            if (argsCnt < 1) throw std::runtime_error("No playerid given to check");
-            if (strlen(args[0]) != 17) throw std::runtime_error("Playerid is not a steam64id. Length mismatch");
-            threadpool->fireAndForget([this, x = std::move(std::string(args[0]))]() {
-                this->initPlayerCheck(x);
-            });
+        else if (!strcmp(function, "beKick")) {
+            this->beEntrypoint(out, outCode, "210", args, argsCnt);
         }
-        else if (!strcmp(function, "getCurrentTime")) {
-            SET_RESULT(0, this->getCurrentTime());
+        else if (!strcmp(function, "beBan")) {
+            this->beEntrypoint(out, outCode, "220", args, argsCnt);
         }
-        else if (!strcmp(function, "getRandomString")) {
-            SET_RESULT(0, this->getRandomString());
+        else if (!strcmp(function, "beShutdown")) {
+            this->beEntrypoint(out, outCode, "250", args, argsCnt);
         }
-        else if (!strcmp(function, "getStringMd5")) {
-            // string
-            if (argsCnt < 1) throw std::runtime_error("No string to hash was given");
-            SET_RESULT(0, this->getStringMd5(args[0]));
+        else if (!strcmp(function, "beLock")) {
+            this->beEntrypoint(out, outCode, "230", args, argsCnt);
         }
-        else if (!strcmp(function, "version")) {
-            SET_RESULT(1, "0.1.0.0");
+        else if (!strcmp(function, "beUnlock")) {
+            this->beEntrypoint(out, outCode, "240", args, argsCnt);
         }
         else {
-            SET_RESULT(1, "Unknown function");
+            SET_RESULT(1, "Unknown be command");
         }
-    
     }
-    catch (std::exception& e) {
-        outCode = outCode ? outCode : 1;
-        out = static_cast<std::string>("Error occured: ") + e.what();
-    }
-
-    strncpy_s(output, outputSize, out.c_str(), _TRUNCATE);
-    return outCode;
 }

@@ -30,7 +30,13 @@
 *   
 * I did it this way to keep the database as simple as possible
 **/
-typedef std::variant<std::string, bool, int, std::pair<std::string, int>> DBReturn;
+typedef std::variant<
+    std::string,    // value
+    bool,           // success/failure
+    int,            // ttl
+    std::pair<std::string, int>, // value, ttl
+    std::vector<std::string> // keys
+> DBReturn;
 
 /**
 * Type/Variant of the callback - string: missionnamespace variable, code: actual function code, lambda: use of dbworker as API (internal)
@@ -49,7 +55,8 @@ typedef std::shared_ptr<DBConnector> DBConRef;
 enum class DBExecutionType {
     ASYNC_CALLBACK,
     ASYNC_FUTURE,
-    ASYNC_POLL
+    ASYNC_POLL,
+    SYNC
 };
 
 /**
@@ -304,12 +311,12 @@ private:
     }
 
     template<typename E>
-    std::function<void()> getFncWrapper(E&& errorValue, std::function<DBReturn(const DBConRef& ref)> f,
-        const std::optional<std::variant<std::function<void(const DBReturn&)>, intercept::types::code> >& fnc,
+    std::function<void()> getFncWrapper(E&& errorValue, std::function<DBReturn(const DBConRef& ref)> fnc,
+        const std::optional<std::variant<std::function<void(const DBReturn&)>, intercept::types::code> >& callback,
         const std::optional<game_value>& args
     ) {
-        return [this, errorValue = std::move(errorValue), fnc = std::move(f)
-                fnc = std::move(fnc), args = std::move(args)
+        return [this, errorValue = std::move(errorValue), fnc = std::move(fnc),
+                callback = std::move(callback), args = std::move(args)
         ](){
             try {
                 auto& db = this->getConnector();
@@ -456,6 +463,11 @@ public:
                 this->getFncWrapper(defaultreturn, lambda)\
             ).share()\
         );\
+    };\
+    template <DBExecutionType T>\
+    typename std::enable_if<T == DBExecutionType::SYNC, DBReturn >::type\
+    fncname(__VA_ARGS__) {\
+        return (this->getFncWrapper(defaultreturn, lambda))();\
     };
 
 // TODO find a alternative to __VA_OPT__(,) and merge this into CREATE_FUNCTION
@@ -485,13 +497,24 @@ public:
                 this->getFncWrapper(defaultreturn, lambda)\
             ).share()\
         );\
+    };\
+    template <DBExecutionType T>\
+    typename std::enable_if<T == DBExecutionType::SYNC, DBReturn >::type\
+    fncname() {\
+        return (this->getFncWrapper(defaultreturn, lambda))();\
     };
 
+    /**
+    *  \brief DB Key  Args are moved!
+    *
+    *  \param pattern const std::string&
+    **/
+
+    CREATE_FUNCTION(keys, std::vector<std::string>(), [prefix = std::move(prefix)](const DBConRef& ref){ return DBReturn(ref->keys(prefix)); }, const std::string& prefix);
 
     /**
     *  \brief DB GET  Args are moved!
     *
-    *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     **/
 
@@ -500,7 +523,6 @@ public:
     /**
     *  \brief DB GETRANGE  Args are moved!
     *
-    *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     *  \param from unsigned int
     *  \param to unsigned int
@@ -511,7 +533,6 @@ public:
     /**
     *  \brief DB GETTTL  Args are moved!
     *
-    *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     **/
     CREATE_FUNCTION(getWithTtl, (std::pair<std::string, int>("", -1)), [key = std::move(key)](const DBConRef& ref){ return ref->getWithTtl(key); }, const std::string& key);
@@ -519,7 +540,6 @@ public:
     /**
     *  \brief DB EXISTS  Args are moved!
     *
-    *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     **/
     CREATE_FUNCTION(exists, false, [key = std::move(key)](const DBConRef& ref){ return ref->exists(key); }, const std::string& key);
@@ -527,7 +547,6 @@ public:
     /**
     *  \brief DB SET  Args are moved!
     *
-    *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     *  \param value const std::string&
     **/
@@ -536,7 +555,6 @@ public:
     /**
     *  \brief DB SETEX  Args are moved!
     *
-    *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     *  \param ttl int
     *  \param value const std::string&
@@ -547,7 +565,6 @@ public:
     /**
     *  \brief DB EXPIRE  Args are moved!
     *
-    *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     *  \param value const std::string&
     *  \param ttl int
@@ -557,7 +574,6 @@ public:
     /**
     *  \brief DB DEL  Args are moved!
     *
-    *  \param statement const DBStatementOptions&
     *  \param key const std::string&
     **/
     CREATE_FUNCTION(del, false, ([key = std::move(key)](const DBConRef& ref){ return ref->del(key); }), const std::string& key);

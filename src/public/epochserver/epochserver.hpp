@@ -2,8 +2,9 @@
 #define __EPOCHLIB_H__
 
 #include <vector>
+#include <shared_mutex>
 
-#include <database/DBWorker.hpp>
+#include <database/DBManager.hpp>
 #include <RCon/RCON.hpp>
 #include <SteamAPI/SteamAPI.hpp>
 #include <main.hpp>
@@ -18,50 +19,38 @@
 class EpochServer {
 private:
     
-    /** 
-    * steam id check cache
-    **/
-    std::shared_mutex checkedSteamIdsMutex;
-    std::vector<uint64> checkedSteamIds;
+    std::shared_ptr<SteamAPI> steamApi = nullptr;
     
-    /**
-    * steam api config
-    **/
-    std::string steamApiKey;
-    std::unique_ptr<SteamAPI> steamApi = nullptr;
-    short steamApiLogLevel = 0;
-    bool kickVacBanned = false;
-    short minDaysSinceLastVacBan = 0;
-    short maxVacBans = 1;
-    int minAccountAge = 0; // in days
-
     /**
     * BattlEye RCON
     **/
-    std::unique_ptr<RCON> rcon = nullptr;
-    bool rconEnabled = false;
-    std::string rconIp;
-    unsigned short rconPort;
-    std::string rconPassword;
-
+    std::shared_ptr<RCON> rcon = nullptr;
+    
     /**
     * Database Access
     **/
-    std::vector<std::pair<std::string, std::shared_ptr<DBWorker> > > dbWorkers;
+    std::unique_ptr<DBManager> dbManager;
 
     /**
     *  Helpers
     **/
     std::string __getBattlEyeGUID(uint64 steamId);    
-    void __setupBattlEye(const rapidjson::Value& config);
-    void __setupSteamApi(const rapidjson::Value& config);
-    void __setupConnection(const std::string& name, const rapidjson::Value& config);
-    std::shared_ptr<DBWorker> __getDbWorker(const std::string& name);
+    void __setupRCON(const rapidjson::Value& config);
+    void __setupSteamAPI(const rapidjson::Value& config);
+
+    void dbEntrypoint(std::string& out, int& outCode, const char *function, const char **args, int argsCnt);
+    void beEntrypoint(std::string& out, int& outCode, const char *function, const char **args, int argsCnt);
+    void callExtensionEntrypointByNumber(std::string& out, int& outCode, const char *function, const char **args, int argsCnt);
 
 public:
     
     EpochServer();
     ~EpochServer();
+
+    EpochServer(const EpochServer&) = delete;
+    EpochServer& operator=(const EpochServer&) = delete;
+    EpochServer(EpochServer&&) = delete;
+    EpochServer& operator=(EpochServer&&) = delete;
 
     /**
     *  \brief Entrypoint that maps strings to functions for Arma's callExtension
@@ -69,16 +58,19 @@ public:
     int callExtensionEntrypoint(char *output, int outputSize, const char *function, const char **args, int argsCnt);
 
     /** 
-    *  \brief Initial player check when joining
-    *  \param steamId 64Bit Steam community id
-    *  \return bool true if player was allowed to join, false if kicked
+    *  UTIL FUNCTIONS
     **/
-    bool initPlayerCheck(const std::string& steamId);
 
     /**
     *  \brief Get random string
     **/
     std::string getRandomString();
+
+    /**
+    *  \brief Generates a 24 Char unique id from current time and some random numbers
+    *   
+    */
+    std::string getUniqueId();
 
     /**
     *  \brief Get md5 hashes of strings
@@ -91,45 +83,9 @@ public:
     **/
     std::string getCurrentTime();
     
-    /* 
-     *  \brief BE broadcast message 
-     *  \param message
-     */
-    void beBroadcastMessage (const std::string& message);
-    
-    /** 
-    *  \brief BE kick
-    *
-    *  Kicks a player
-    *
-    *  \param playerGUID
-    **/
-    void beKick (const std::string& playerGUID);
-    
-    /** 
-    *  \brief BE ban
-    *  \param playerGUID
-    *  \param message
-    *  \param duration (minutes)
-    **/
-    void beBan(const std::string& playerGUID, const std::string& message, int duration);
-    
     /**
-    *  \brief BE shutdown 
+    *  \brief Log something to the extension logs
     **/
-    void beShutdown();
-    
-    /** 
-    *  \brief BE lock
-    **/
-    void beLock();
-    
-    /**
-    *  \brief BE unlock
-    **/
-    void beUnlock();
-
-
     void log(const std::string& log);
 };
 
