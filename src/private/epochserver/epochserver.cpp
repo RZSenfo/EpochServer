@@ -134,8 +134,13 @@ void EpochServer::__setupRCON(const rapidjson::Value& config) {
                 auto vpnObj = config["vpndetection"].GetObject();
                 if (vpnObj.HasMember("enable") && vpnObj["enable"].GetBool() && vpnObj.HasMember("iphubapikey")) {
                     
+                    std::string apikey = vpnObj["iphubapikey"].GetString();
+                    if (apikey.empty()) {
+                        return;
+                    }
+
                     this->whitelist->enable_vpn_detection(
-                        /* api key */ vpnObj["iphubapikey"].GetString(),
+                        /* api key */ apikey,
                         /* kicksuspecious */ vpnObj.HasMember("kicksuspecious") && vpnObj["kicksuspecious"].GetBool()
                     );
 
