@@ -36,53 +36,6 @@ private:
     std::unordered_set<std::string> vpn_whitelisted_guids;
     std::mutex vpn_whitelist_mutex;
 
-    void on_player_connected(const RconPlayerInfo& info) {
-        
-        // name checks
-        bool bad_name = this->is_bad_player_string(info.player_name);
-        if (bad_name) {
-            this->rcon->send_command("kick " + info.number + " Bad Playername! Only A-Z,a-z,0-9 allowed!");
-            return;
-        }
-
-    }
-
-    void on_player_verified(const RconPlayerInfo& info) {
-        
-        //check whitelist
-        if (info.verified && this->enable_whitelist && !this->is_whitelisted_player(info.guid)) {
-            this->open_slots--;
-            if (this->open_slots < 0) {
-                this->rcon->send_command("kick " + info.number + " " + this->kick_message_wl);
-                return;
-            }
-        }
-
-        // vpn check
-        if (this->enable_vpnchecks && info.ip.length() > 1 && !this->is_vpn_whitelisted_player(info.guid)) {
-            
-            threadpool->fireAndForget([this, ip = info.ip, number = info.number ]() {
-                bool vpn_detected = false;
-                bool request_throtteled = false;
-                this->vpn->check_vpn(ip, vpn_detected, request_throtteled);
-
-                if (vpn_detected) {
-                    this->rcon->send_command("kick " + number + " " + this->kick_message_vpn);
-                }
-            });
-
-        }
-    }
-
-    void on_player_disconnected(const RconPlayerInfo& info) {
-        
-        // free open slot
-        if (info.verified && !this->is_whitelisted_player(info.guid)) {
-            this->open_slots++;
-        }
-
-    }
-
     bool is_bad_player_string(const std::string& player_name) {
 
         for (int i = 0; i < player_name.length(); i++) {
@@ -118,6 +71,18 @@ public:
     
     Whitelist(std::shared_ptr<RCON> rcon) : rcon(rcon) {
         if (!rcon) throw std::runtime_error("Whitelist only works with working RCon!");
+
+        this->rcon->set_player_connected_callback([this](const RconPlayerInfo& info) {
+            this->on_player_connected(info);
+        });
+
+        this->rcon->set_player_disconnected_callback([this](const RconPlayerInfo& info) {
+            this->on_player_disconnected(info);
+        });
+
+        this->rcon->set_player_connected_callback([this](const RconPlayerInfo& info) {
+            this->on_player_verified(info);
+        });
     }
 
     void set_whitelist_enabled(bool _state) {
@@ -166,6 +131,54 @@ public:
     void add_vpn_detection_guid_exception(const std::string& _guid) {
         std::lock_guard<std::mutex> lock(vpn_whitelist_mutex);
         this->vpn_whitelisted_guids.insert(_guid);
+    }
+
+    // rcon callbacks
+    void on_player_connected(const RconPlayerInfo& info) {
+
+        // name checks
+        bool bad_name = this->is_bad_player_string(info.player_name);
+        if (bad_name) {
+            this->rcon->send_command("kick " + info.number + " Bad Playername! Only A-Z,a-z,0-9 allowed!");
+            return;
+        }
+
+    }
+
+    void on_player_verified(const RconPlayerInfo& info) {
+
+        //check whitelist
+        if (info.verified && this->enable_whitelist && !this->is_whitelisted_player(info.guid)) {
+            this->open_slots--;
+            if (this->open_slots < 0) {
+                this->rcon->send_command("kick " + info.number + " " + this->kick_message_wl);
+                return;
+            }
+        }
+
+        // vpn check
+        if (this->enable_vpnchecks && info.ip.length() > 1 && !this->is_vpn_whitelisted_player(info.guid)) {
+
+            threadpool->fireAndForget([this, ip = info.ip, number = info.number ]() {
+                bool vpn_detected = false;
+                bool request_throtteled = false;
+                this->vpn->check_vpn(ip, vpn_detected, request_throtteled);
+
+                if (vpn_detected) {
+                    this->rcon->send_command("kick " + number + " " + this->kick_message_vpn);
+                }
+            });
+
+        }
+    }
+
+    void on_player_disconnected(const RconPlayerInfo& info) {
+
+        // free open slot
+        if (info.verified && !this->is_whitelisted_player(info.guid)) {
+            this->open_slots++;
+        }
+
     }
 };
 
