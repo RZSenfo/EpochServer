@@ -243,7 +243,6 @@ private:
             // malformed input: not an array
             return {};
         }
-    }
 
     /**
       *   \brief Internal function for lockless db connector assignment
