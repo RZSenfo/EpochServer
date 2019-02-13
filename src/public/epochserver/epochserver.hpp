@@ -58,7 +58,9 @@ private:
     void __setupSteamAPI(const rapidjson::Value& config);
 
     void dbEntrypoint(std::string& out, int outputSize, int& outCode, const char *function, const char **args, int argsCnt);
+    void dbEntrypoint(std::string& out, int outputSize, int& outCode, const char function, const char **args, int argsCnt);
     void beEntrypoint(std::string& out, int outputSize, int& outCode, const char *function, const char **args, int argsCnt);
+    void beEntrypoint(std::string& out, int outputSize, int& outCode, const char function, const char **args, int argsCnt);
     void callExtensionEntrypointByNumber(std::string& out, int outputSize, int& outCode, const char *function, const char **args, int argsCnt);
 
     /**

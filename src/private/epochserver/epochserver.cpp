@@ -417,12 +417,12 @@ void EpochServer::callExtensionEntrypointByNumber(std::string& out, int outputSi
         }
     // db
     case '1': {
-        this->dbEntrypoint(out, outputSize, outCode, function, args, argsCnt);
+        this->dbEntrypoint(out, outputSize, outCode, function[1], args, argsCnt);
         break;
     }
     // be
     case '2': {
-        this->beEntrypoint(out, outputSize, outCode, function, args, argsCnt);
+        this->beEntrypoint(out, outputSize, outCode, function[1], args, argsCnt);
         break;
     }
     // steamapi
@@ -486,257 +486,236 @@ void EpochServer::callExtensionEntrypointByNumber(std::string& out, int outputSi
     };
 }
 
+void EpochServer::dbEntrypoint(std::string& out, int outputSize, int& outCode, const char function, const char **args, int argsCnt) {
+    switch(function) {
+        // get
+        case '1': {
+            if (argsCnt == 2) {
+                this->dbManager->get<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), std::nullopt, std::nullopt);
+            }
+            else if (argsCnt >= 3) {
+                this->dbManager->get<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), STR_MOVE(args[2]), argsCnt >= 4 ? STR_MOVE(args[3]) : "[]");
+            }
+            else THROW_ARGS_INVALID_NUM("get");
+            break;
+        };
+                  // getTtl
+        case '2': {
+            if (argsCnt == 2) {
+                this->dbManager->getWithTtl<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), std::nullopt, std::nullopt);
+            }
+            else if (argsCnt >= 3) {
+                this->dbManager->getWithTtl<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), STR_MOVE(args[2]), argsCnt >= 4 ? STR_MOVE(args[3]) : "[]");
+            }
+            else THROW_ARGS_INVALID_NUM("getTtl");
+            break;
+        };
+                  // set
+        case '3': {
+            if (argsCnt == 3) {
+                this->dbManager->set<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), STR_MOVE(args[2]), std::nullopt, std::nullopt);
+            }
+            else if (argsCnt >= 4) {
+                this->dbManager->set<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), STR_MOVE(args[2]), STR_MOVE(args[3]), argsCnt >= 5 ? STR_MOVE(args[4]) : "[]");
+            }
+            else THROW_ARGS_INVALID_NUM("set");
+            break;
+        };
+                  // setEx
+        case '4': {
+            if (argsCnt == 4) {
+                int ttl = std::stoi(args[2]);
+                this->dbManager->setEx<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), ttl, STR_MOVE(args[3]), std::nullopt, std::nullopt);
+            }
+            else if (argsCnt >= 5) {
+                int ttl = std::stoi(args[2]);
+                this->dbManager->setEx<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), ttl, STR_MOVE(args[3]), STR_MOVE(args[4]), argsCnt >= 6 ? STR_MOVE(args[5]) : "[]");
+            }
+            else THROW_ARGS_INVALID_NUM("setEx");
+            break;
+        };
+                  // query
+        case '5': {
+            break;
+        };
+                  // Exists
+        case '6': {
+            if (argsCnt == 2) {
+                this->dbManager->exists<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), std::nullopt, std::nullopt);
+            }
+            else if (argsCnt >= 3) {
+                this->dbManager->exists<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), STR_MOVE(args[2]), argsCnt >= 4 ? STR_MOVE(args[3]) : "[]");
+            }
+            else THROW_ARGS_INVALID_NUM("exists");
+            break;
+        };
+                  // Expire
+        case '7': {
+            if (argsCnt == 3) {
+                int ttl = std::stoi(args[2]);
+                this->dbManager->expire<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), ttl, std::nullopt, std::nullopt);
+            }
+            else if (argsCnt >= 4) {
+                int ttl = std::stoi(args[2]);
+                this->dbManager->expire<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), ttl, STR_MOVE(args[3]), argsCnt >= 5 ? STR_MOVE(args[4]) : "[]");
+            }
+            else THROW_ARGS_INVALID_NUM("expire");
+            break;
+        };
+                  // del
+        case '8': {
+            if (argsCnt == 2) {
+                this->dbManager->del<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), std::nullopt, std::nullopt);
+            }
+            else if (argsCnt >= 3) {
+                this->dbManager->del<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), STR_MOVE(args[2]), argsCnt >= 4 ? STR_MOVE(args[3]) : "[]");
+            }
+            else THROW_ARGS_INVALID_NUM("del");
+            break;
+        };
+                  // getRange
+        case '9': {
+            if (argsCnt == 4) {
+                unsigned long from, to;
+                from = std::stoul(args[2]);
+                to = std::stoul(args[3]);
+                this->dbManager->getRange<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), from, to, std::nullopt, std::nullopt);
+            }
+            else if (argsCnt >= 5) {
+                unsigned long from, to;
+                from = std::stoul(args[2]);
+                to = std::stoul(args[3]);
+                this->dbManager->getRange<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), from, to, STR_MOVE(args[4]), argsCnt >= 6 ? STR_MOVE(args[5]) : "[]");
+            }
+            else THROW_ARGS_INVALID_NUM("getRange");
+            break;
+        };
+                  // TODO
+        case '0': {
+            break;
+        };
+        default: { SET_RESULT(1, "Unknown function"); };
+    };
+}
+
+#define MAP_DB_ENTRY(name, number)\
+if (!strcmp(function, name)) {\
+    this->dbEntrypoint(out, outputSize, outCode, number, args, argsCnt);\
+    return;\
+}
+
 void EpochServer::dbEntrypoint(std::string& out, int outputSize, int& outCode, const char *function, const char **args, int argsCnt) {
     
-    if (strlen(function) == 2) {
-        switch(function[1]) {
-            // get
-            case '1': {
-                if (argsCnt == 2) {
-                    this->dbManager->get<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), std::nullopt, std::nullopt);
-                }
-                else if (argsCnt >= 3) {
-                    this->dbManager->get<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), STR_MOVE(args[2]), argsCnt >= 4 ? STR_MOVE(args[3]) : "[]");
-                }
-                else THROW_ARGS_INVALID_NUM("get");
-                break;
-            };
-            // getTtl
-            case '2': {
-                if (argsCnt == 2) {
-                    this->dbManager->getWithTtl<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), std::nullopt, std::nullopt);
-                }
-                else if (argsCnt >= 3) {
-                    this->dbManager->getWithTtl<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), STR_MOVE(args[2]), argsCnt >= 4 ? STR_MOVE(args[3]) : "[]");
-                }
-                else THROW_ARGS_INVALID_NUM("getTtl");
-                break;
-            };
-            // set
-            case '3': {
-                if (argsCnt == 3) {
-                    this->dbManager->set<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), STR_MOVE(args[2]), std::nullopt, std::nullopt);
-                }
-                else if (argsCnt >= 4) {
-                    this->dbManager->set<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), STR_MOVE(args[2]), STR_MOVE(args[3]), argsCnt >= 5 ? STR_MOVE(args[4]) : "[]");
-                }
-                else THROW_ARGS_INVALID_NUM("set");
-                break;
-            };
-            // setEx
-            case '4': {
-                if (argsCnt == 4) {
-                    int ttl = std::stoi(args[2]);
-                    this->dbManager->setEx<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), ttl, STR_MOVE(args[3]), std::nullopt, std::nullopt);
-                }
-                else if (argsCnt >= 5) {
-                    int ttl = std::stoi(args[2]);
-                    this->dbManager->setEx<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), ttl, STR_MOVE(args[3]), STR_MOVE(args[4]), argsCnt >= 6 ? STR_MOVE(args[5]) : "[]");
-                }
-                else THROW_ARGS_INVALID_NUM("setEx");
-                break;
-            };
-            // query
-            case '5': {
-                break;
-            };
-            // Exists
-            case '6': {
-                if (argsCnt == 2) {
-                    this->dbManager->exists<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), std::nullopt, std::nullopt);
-                }
-                else if (argsCnt >= 3) {
-                    this->dbManager->exists<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), STR_MOVE(args[2]), argsCnt >= 4 ? STR_MOVE(args[3]) : "[]");
-                }
-                else THROW_ARGS_INVALID_NUM("exists");
-                break;
-            };
-            // Expire
-            case '7': {
-                if (argsCnt == 3) {
-                    int ttl = std::stoi(args[2]);
-                    this->dbManager->expire<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), ttl, std::nullopt, std::nullopt);
-                }
-                else if (argsCnt >= 4) {
-                    int ttl = std::stoi(args[2]);
-                    this->dbManager->expire<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), ttl, STR_MOVE(args[3]), argsCnt >= 5 ? STR_MOVE(args[4]) : "[]");
-                }
-                else THROW_ARGS_INVALID_NUM("expire");
-                break;
-            };
-            // del
-            case '8': {
-                if (argsCnt == 2) {
-                    this->dbManager->del<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), std::nullopt, std::nullopt);
-                }
-                else if (argsCnt >= 3) {
-                    this->dbManager->del<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), STR_MOVE(args[2]), argsCnt >= 4 ? STR_MOVE(args[3]) : "[]");
-                }
-                else THROW_ARGS_INVALID_NUM("del");
-                break;
-            };
-            // getRange
-            case '9': {
-                if (argsCnt == 4) {
-                    unsigned long from, to;
-                    from = std::stoul(args[2]);
-                    to = std::stoul(args[3]);
-                    this->dbManager->getRange<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), from, to, std::nullopt, std::nullopt);
-                }
-                else if (argsCnt >= 5) {
-                    unsigned long from, to;
-                    from = std::stoul(args[2]);
-                    to = std::stoul(args[3]);
-                    this->dbManager->getRange<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), from, to, STR_MOVE(args[4]), argsCnt >= 6 ? STR_MOVE(args[5]) : "[]");
-                }
-                else THROW_ARGS_INVALID_NUM("getRange");
-                break;
-            };
-            // TODO
-            case '0': {
-                break;
-            };
-            default: { SET_RESULT(1, "Unknown function"); };
-        };
+    // skip prefix TODO test encoding.. might need to skipp more bytes
+    function += 2;
+
+    MAP_DB_ENTRY("Get", '1');
+    MAP_DB_ENTRY("Exists", '6');
+    MAP_DB_ENTRY("Set", '3');
+    MAP_DB_ENTRY("SetEx", '4');
+    MAP_DB_ENTRY("Expire", '7');
+    MAP_DB_ENTRY("Del", '8');
+    MAP_DB_ENTRY("Query", '5');
+    MAP_DB_ENTRY("GetTtl", '2');
+    MAP_DB_ENTRY("GetRange", '9');
+    
+    if (!strcmp(function, "Ping")) { // TODO callback
+        this->dbManager->ping<DBExecutionType::ASYNC_CALLBACK>(args[0], std::nullopt, std::nullopt);
     }
     else {
-        // skip prefix TODO test encoding.. might need to skipp more bytes
-        function += 2;
-
-        if (!strcmp(function, "Get")) {
-            // 1
-            this->dbEntrypoint(out, outputSize, outCode, "11", args, argsCnt);
-        }
-        else if (!strcmp(function, "Exists")) {
-            // 6
-            this->dbEntrypoint(out, outputSize, outCode, "16", args, argsCnt);
-        }
-        else if (!strcmp(function, "Set")) {
-            // 3
-            this->dbEntrypoint(out, outputSize, outCode, "13", args, argsCnt);
-        }
-        else if (!strcmp(function, "SetEx")) {
-            // 4
-            this->dbEntrypoint(out, outputSize, outCode, "14", args, argsCnt);
-        }
-        else if (!strcmp(function, "Expire")) {
-            // 7
-            this->dbEntrypoint(out, outputSize, outCode, "17", args, argsCnt);
-        }
-        else if (!strcmp(function, "Del")) {
-            // 8
-            this->dbEntrypoint(out, outputSize, outCode, "18", args, argsCnt);
-        }
-        else if (!strcmp(function, "Query")) {
-            // 5
-            this->dbEntrypoint(out, outputSize, outCode, "15", args, argsCnt);
-        }
-        else if (!strcmp(function, "GetTtl")) {
-            // 2
-            this->dbEntrypoint(out, outputSize, outCode, "12", args, argsCnt);
-        }
-        else if (!strcmp(function, "GetRange")) {
-            // 9
-            this->dbEntrypoint(out, outputSize, outCode, "19", args, argsCnt);
-        }
-        else if (!strcmp(function, "Ping")) {
-            this->dbManager->ping<DBExecutionType::ASYNC_CALLBACK>(args[0], std::nullopt, std::nullopt);
-        }
-        else {
-            SET_RESULT(1, "Unknown db command");
-        }
+        SET_RESULT(1, "Unknown db command");
     }
 }
 
-void EpochServer::beEntrypoint(std::string& out, int outputSize, int& outCode, const char *function, const char **args, int argsCnt) {
+void EpochServer::beEntrypoint(std::string& out, int outputSize, int& outCode, const char function, const char **args, int argsCnt) {
     
     if (!this->rcon) {
         SET_RESULT(1, "RCON NOT AVAILABLE");
         return;
     }
 
-    if (strlen(function) == 2) {
-        switch (function[1]) {
-            // broadcast
-            case '0': {
-                if (argsCnt < 1) throw std::runtime_error("Missing message param for beBroadcastMessage");
-                threadpool->fireAndForget([this, x = std::string(args[0])]() {
-                    this->rcon->send_global_msg(x);
-                });
-                break;
-            }
-            // kick
-            case '1': {
-                if (argsCnt < 1) throw std::runtime_error("Missing guid param in beKick");
-                threadpool->fireAndForget([this, x = std::string(args[0])]() {
-                    this->rcon->kick(x);
-                });
-                break;
-            }
-            // ban
-            case '2': {
-                if (argsCnt < 1) throw std::runtime_error("Missing params for beBan");
-                std::string msg = argsCnt > 1 ? args[1] : "BE Ban";
-                if (msg.empty()) msg = "BE Ban";
-                int dur = -1;
-                if (argsCnt > 2) {
-                    try {
-                        dur = std::stoi(args[2]);
-                    }
-                    catch (...) {
-                        WARNING(static_cast<std::string>("Could not parse banDuration, fallback to permaban. GUID: ") + args[0]);
-                    }
+    switch (function) {
+        // broadcast
+        case '0': {
+            if (argsCnt < 1) throw std::runtime_error("Missing message param for beBroadcastMessage");
+            threadpool->fireAndForget([this, x = std::string(args[0])]() {
+                this->rcon->send_global_msg(x);
+            });
+            break;
+        }
+        // kick
+        case '1': {
+            if (argsCnt < 1) throw std::runtime_error("Missing guid param in beKick");
+            threadpool->fireAndForget([this, x = std::string(args[0])]() {
+                this->rcon->kick(x);
+            });
+            break;
+        }
+        // ban
+        case '2': {
+            if (argsCnt < 1) throw std::runtime_error("Missing params for beBan");
+            std::string msg = argsCnt > 1 ? args[1] : "BE Ban";
+            if (msg.empty()) msg = "BE Ban";
+            int dur = -1;
+            if (argsCnt > 2) {
+                try {
+                    dur = std::stoi(args[2]);
                 }
-                threadpool->fireAndForget([this, uid = std::string(args[0]), msg = std::move(msg), dur]() {
-                    this->rcon->add_ban(uid, msg, dur);
-                });
-                break;
+                catch (...) {
+                    WARNING(static_cast<std::string>("Could not parse banDuration, fallback to permaban. GUID: ") + args[0]);
+                }
             }
-            // lock
-            case '3': {
-                threadpool->fireAndForget([this]() {
-                    this->rcon->lockServer();
-                });
-                break;
-            }
-            // unlock
-            case '4': {
-                threadpool->fireAndForget([this]() {
-                    this->rcon->unlockServer();
-                });
-                break;
-            }
-            // shutdown
-            case '5': {
-                this->rcon->shutdownServer();
-                break;
-            }
-            default: {
-                SET_RESULT(1, "Unknown be command");
-            }
+            threadpool->fireAndForget([this, uid = std::string(args[0]), msg = std::move(msg), dur]() {
+                this->rcon->add_ban(uid, msg, dur);
+            });
+            break;
         }
-    }
-    else {
-        if (!strcmp(function, "beBroadcastMessage")) {
-            this->beEntrypoint(out, outputSize, outCode, "20", args, argsCnt);
+        // lock
+        case '3': {
+            threadpool->fireAndForget([this]() {
+                this->rcon->lockServer();
+            });
+            break;
         }
-        else if (!strcmp(function, "beKick")) {
-            this->beEntrypoint(out, outputSize, outCode, "21", args, argsCnt);
+        // unlock
+        case '4': {
+            threadpool->fireAndForget([this]() {
+                this->rcon->unlockServer();
+            });
+            break;
         }
-        else if (!strcmp(function, "beBan")) {
-            this->beEntrypoint(out, outputSize, outCode, "22", args, argsCnt);
+        // shutdown
+        case '5': {
+            this->rcon->shutdownServer();
+            break;
         }
-        else if (!strcmp(function, "beShutdown")) {
-            this->beEntrypoint(out, outputSize, outCode, "25", args, argsCnt);
-        }
-        else if (!strcmp(function, "beLock")) {
-            this->beEntrypoint(out, outputSize, outCode, "23", args, argsCnt);
-        }
-        else if (!strcmp(function, "beUnlock")) {
-            this->beEntrypoint(out, outputSize, outCode, "24", args, argsCnt);
-        }
-        else {
+        default: {
             SET_RESULT(1, "Unknown be command");
         }
     }
+}
+
+#define MAP_BE_ENTRY(name, number)\
+if (!strcmp(function, name)) {\
+    this->beEntrypoint(out, outputSize, outCode, number, args, argsCnt);\
+    return;\
+}
+
+void EpochServer::beEntrypoint(std::string& out, int outputSize, int& outCode, const char *function, const char **args, int argsCnt) {
+
+    if (!this->rcon) {
+        SET_RESULT(1, "RCON NOT AVAILABLE");
+        return;
+    }
+
+    MAP_BE_ENTRY("beBroadcastMessage", '0');
+    MAP_BE_ENTRY("beKick", '1');
+    MAP_BE_ENTRY("beBan", '2');
+    MAP_BE_ENTRY("beShutdown", '5');
+    MAP_BE_ENTRY("beLock", '3');
+    MAP_BE_ENTRY("beUnlock", '4');
+
+    // No matches
+    SET_RESULT(1, "Unknown be command");
+
 }
