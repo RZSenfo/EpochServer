@@ -8,6 +8,9 @@
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/fmt/ostr.h>
 
+
+// TODO create Threadpool and Logger singleton
+
 #define INFO logging::logfile->info
 #define DEBUG logging::logfile->debug
 #define WARNING logging::logfile->warn
@@ -30,7 +33,7 @@ extern std::unique_ptr<ThreadPool> threadpool;
 // INTERCEPT
 #define WITH_INTERCEPT // TODO make it a CMAKE option
 #ifdef WITH_INTERCEPT
-    #include <intercept.hpp>
+#include <intercept.hpp>
 #endif
 
 #include <string>
@@ -72,6 +75,19 @@ namespace utils {
 
     template<typename T>
     std::string pointerToString(T* _ptr);
+
+#ifdef WITH_INTERCEPT
+    /**
+    *   \brief Internal function wrapper for the parseSimpleArray recursion
+    *
+    *   Parses a string to an array (same restrictions as: https://community.bistudio.com/wiki/parseSimpleArray)
+    *
+    *   \param statement DBStatementOptions Options for the executed statement
+    *   \param result std::shared_future<DBReturn> future to the result of the Database call
+    *
+    **/
+    auto_array<game_value> parseSimpleArray(const std::string& in);
+#endif
 };
 
 #endif

@@ -143,4 +143,92 @@ namespace utils {
         _ss << (void const *)_ptr;
         return _ss.str();
     }
+
+#ifdef WITH_INTERCEPT
+    auto_array<game_value> __parseSimpleArray(const std::string& in, size_t begin_idx, size_t& finished_index) {
+
+        auto_array<game_value> out = {};
+
+        // it has to be at least the opening bracket and the closing bracket
+        if ((in.length() - begin_idx) >= 2 && *(in.begin() + begin_idx) == '[') {
+
+            size_t current_index = 1;
+            auto current = in.begin() + current_index;
+
+            while (true) {
+
+                if (*current == ']') {
+                    // subarray end
+                    finished_index = current_index + 1;
+                    return out;
+                }
+
+                if (*current == ',') {
+                    // next element
+                    ++current_index; // after ,
+                    current = in.begin() + current_index;
+                }
+
+                // cases: subarray, string, number, bool
+                if (*current == '[') {
+                    size_t done = 0;
+                    out.emplace_back(__parseSimpleArray(in, current_index, done));
+
+                    current_index = current_index + done;
+                    current = in.begin() + current_index;
+
+                }
+                else if (*current == '"') {
+
+                    // "" x "",
+                    // find end
+                    auto search_idx = current_index + 2;
+                    auto idx = in.find('"', search_idx);
+
+                    out.emplace_back(std::string(in.begin() + search_idx, in.begin() + idx));
+
+                    current_index = idx + 2; // after ""
+                    current = in.begin() + current_index;
+
+                }
+                else if ((*current >= '0' && *current <= '9') || *current == '.') {
+                    auto idx = in.find_first_not_of("1234567890.",current_index) - 1;
+
+                    out.emplace_back(std::stof(std::string(current, in.begin() + idx)));
+
+                    current_index = idx;
+                    current = in.begin() + current_index;
+                }
+                else if (*current == 't' || *current == 'f') {
+                    out.emplace_back(*current == 't');
+                    auto idx = in.find_first_not_of("truefals", current_index) - 1;
+                    current_index = idx;
+                    current = in.begin() + current_index;
+                }
+                else {
+                    // unexpected char found
+                    return {};
+                }
+            }
+        }
+        else {
+            // malformed input: not an array
+            return {};
+        }
+    }
+
+    /**
+    *   \brief Internal function wrapper for the parseSimpleArray recursion
+    *
+    *   Parses a string to an array (same restrictions as: https://community.bistudio.com/wiki/parseSimpleArray)
+    *
+    *   \param statement DBStatementOptions Options for the executed statement
+    *   \param result std::shared_future<DBReturn> future to the result of the Database call
+    *
+    **/
+    auto_array<game_value> parseSimpleArray(const std::string& in) {
+        size_t idx = 0;
+        return __parseSimpleArray(in, 0, idx);
+    }
+#endif
 };
