@@ -27,7 +27,7 @@ extern "C" {
 };
 #endif
 
-static std::unique_ptr<EpochServer> server;
+std::unique_ptr<EpochServer> server;
 
 std::unique_ptr<ThreadPool> threadpool;
 
