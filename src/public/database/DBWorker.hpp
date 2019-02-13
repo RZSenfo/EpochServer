@@ -43,6 +43,7 @@ typedef std::variant<
 * if you need external args in lambda, just bind them
 **/
 typedef std::variant<std::string, intercept::types::code, std::function<void(const DBReturn&)> > DBCallback;
+typedef std::variant<std::string, intercept::types::game_value > DBCallbackArg;
 
 typedef std::shared_ptr<DBConnector> DBConRef;
 
@@ -121,27 +122,9 @@ private:
       **/
     void callbackResultIfNeeded(
         const DBReturn& result,
-        const std::optional<std::variant<std::function<void(const DBReturn&)>, intercept::types::code> >& fnc,
-        const std::optional<game_value>& args
-    ) {
-        if (!fnc.has_value()) return;
-
-        if (fnc->index() == 1) {
-            // arma script code
-            intercept::client::invoker_lock lock;
-            intercept::sqf::call(
-                std::get<intercept::types::code>(*fnc),
-                auto_array<game_value>({
-                    game_value(result.index() == 0 ? std::get<std::string>(result) : std::to_string(result.index() == 1 ? std::get<bool>(result) : std::get<int>(result))),
-                    args.has_value() ? *args : game_value()
-                })
-            );
-        }
-        else {
-            // lambda function
-            std::get< std::function<void(const DBReturn&)> >(fnc.value())(result);
-        }
-    }
+        const std::optional<DBCallback>& fnc,
+        const std::optional<DBCallbackArg>& args
+    );
 
     /**
       *   \brief Internal method to insert future into result storage
@@ -164,82 +147,21 @@ private:
       *
       *   \throws std::runtime_exception if all connectors are assigned and anew one is requested
       **/
-    DBConRef getConnector() {
-        auto tid = std::this_thread::get_id();
-        for (auto& x : this->dbConnectors) {
-            if (x.first == tid) {
-                return x.second;
-            }
-        }
-        auto newID = this->dbConnectorUID++;
-        if (newID >= this->dbConnectorsCount) {
-            throw std::runtime_error("Unexpected amout of threads tried to get database connectors");
-        }
-        DBConRef connector;
-        try {
-            switch (dbConfig.dbType) {
-            case DBType::MY_SQL: {
-                connector = std::make_shared<MySQLConnector>(this->dbConfig);
-                break;
-            }
-            case DBType::SQLITE: {
-                connector = std::make_shared<SQLiteConnector>(this->dbConfig);
-                break;
-            }
-            case DBType::REDIS: {
-                connector = std::make_shared<RedisConnector>(this->dbConfig);
-                break;
-            }
-            default: {
-                WARNING("Unknown Database type");
-                break;
-            }
-            };
-        }
-        catch (const std::runtime_error& e) {
-            WARNING(std::string("Runtime Error during connector creation:") + e.what());
-            throw std::runtime_error("Could not create database connector");
-        }
-        if (!connector) {
-            WARNING("Database connector could not be created");
-            throw std::runtime_error("Database connector could not be created");
-        }
-
-        this->dbConnectors[newID].second = connector;
-        this->dbConnectors[newID].first = tid;
-        return connector;
-    }
+    DBConRef getConnector();
 
     template<typename E>
-    std::function<DBReturn()> getFncWrapper(E&& errorValue, std::function<DBReturn(const DBConRef& ref)> f) {
-        return [this, errorValue = std::move(errorValue), fnc = std::move(f)](){
-            try {
-                auto& db = this->getConnector();
-                DBReturn result = fnc(db);
-                return result;
-            }
-            catch (std::exception& e) {
-                return static_cast<DBReturn>(errorValue);
-            }
-        };
-    }
+    std::function<DBReturn()> getFncWrapper(
+        E&& errorValue,
+        std::function<DBReturn(const DBConRef& ref)>&& f
+    );
 
     template<typename E>
-    std::function<void()> getFncWrapper(E&& errorValue, std::function<DBReturn(const DBConRef& ref)> fnc,
-        const std::optional<std::variant<std::function<void(const DBReturn&)>, intercept::types::code> >& callback,
-        const std::optional<game_value>& args
-    ) {
-        return [this, errorValue = std::move(errorValue), fnc = std::move(fnc),
-                callback = std::move(callback), args = std::move(args)
-        ](){
-            try {
-                auto& db = this->getConnector();
-                DBReturn result = fnc(db);
-                this->callbackResultIfNeeded(result, callback, args);
-            }
-            catch (std::exception& e) {}
-        };
-    }
+    std::function<void()> getFncWrapper(
+        E&& errorValue,
+        std::function<DBReturn(const DBConRef& ref)>&& fnc,
+        std::optional<DBCallback>&& callback,
+        std::optional<DBCallbackArg>&& args
+    );
 
 public:
 
@@ -251,26 +173,16 @@ public:
     *  \throws std::runtime_error if there was an error creating the connector
     *  \param dbConfig configuration object
     **/
-    DBWorker(const DBConfig& dbConfig) {
-        this->dbConfig = dbConfig;
-        this->isSqlDB = dbConfig.dbType == DBType::MY_SQL;
+    DBWorker(const DBConfig& dbConfig);
 
-        // Threadpool threads + current
-        this->dbConnectorsCount = threadpool->getPoolSize() + 1;
-        this->dbConnectors.reserve(this->dbConnectorsCount);
-        for (size_t i = 0; i < this->dbConnectorsCount; ++i) {
-            this->dbConnectors.emplace_back(
-                std::pair < std::thread::id, DBConRef >(
-                    std::thread::id(), nullptr
-                )
-            );
-        }
+    DBWorker() = delete;
+    DBWorker(const DBWorker&) = delete;
+    DBWorker& operator=(const DBWorker&) = delete;
+    DBWorker(DBWorker&&) = delete;
+    DBWorker& operator=(DBWorker&&) = delete;
 
-        this->getConnector();
-    }
+    ~DBWorker();
 
-    ~DBWorker() {
-    }
 
     /**
     *  \brief Checks if the id is known
