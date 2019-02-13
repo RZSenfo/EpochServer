@@ -219,7 +219,7 @@ void EpochServer::__setupSteamAPI(const rapidjson::Value& config) {
 
 EpochServer::~EpochServer() {}
 
-void EpochServer::insertCallback(SQFCallBackHandle&& cb) {
+void EpochServer::insertCallback(const SQFCallBackHandle& cb) {
 
     std::string x;
     cb.toString(x);

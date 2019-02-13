@@ -24,7 +24,7 @@ struct SQFCallBackHandle {
 
     std::string extraArg;
 
-    void toString(std::string& out) {
+    void toString(std::string& out) const {
         out.reserve(9 + result.size() + function.size() + extraArg.size());
         out = "[\"" + function + "\"," + std::to_string(functionIsCode) + "," + result + ",\"" + (extraArg.empty() ? "" : extraArg) + "\"]";
     }
@@ -68,17 +68,6 @@ private:
     std::queue< std::pair<std::string, size_t> > results; /*!< results storage */
 
     std::mutex resultsMutex; /*!< mutex for results storage */
-
-    /**
-    *   \brief Internal method to insert future into result storage
-    *
-    *   Handles insertion into result storage
-    *
-    *   \param statement DBStatementOptions Options for the executed statement
-    *   \param result std::shared_future<DBReturn> future to the result of the Database call
-    *
-    **/
-    void insertCallback(SQFCallBackHandle&& cb);
 
 public:
     
@@ -125,6 +114,16 @@ public:
     *  \brief Log something to the extension logs
     **/
     void log(const std::string& log);
+
+    /**
+    *   \brief Internal method to insert callback into callback queue
+    *
+    *   Handles insertion into callback queue
+    *
+    *   \param cb SQFCallBackHandle
+    *
+    **/
+    void insertCallback(const SQFCallBackHandle& cb);
 };
 
 #endif //__EPOCHLIB_H__

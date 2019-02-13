@@ -4,7 +4,12 @@
 #define __DATABASE_WORKER_HPP__
 
 #include <vector>
+#include <string>
+#include <utility>
+#include <functional>
+#include <variant>
 #include <thread>
+#include <optional>
 #include <mutex>
 #include <shared_mutex>
 
@@ -13,6 +18,7 @@
 #include <database/MySQLConnector.hpp>
 #include <database/RedisConnector.hpp>
 #include <database/SQLiteConnector.hpp>
+
 #include <main.hpp>
 
 /**
@@ -45,8 +51,20 @@ typedef std::variant<
 *    lambda: use of dbworker as API (internal)
 * if you need external args in lambda, just bind them (they have to be copyable tho)
 **/
-typedef std::variant<std::string, intercept::types::code, std::function<void(const DBReturn&)> > DBCallback;
-typedef std::variant<std::string, intercept::types::game_value > DBCallbackArg;
+typedef std::variant<
+    std::string,
+    std::function<void(const DBReturn&)>
+#ifdef WITH_INTERCEPT
+    , intercept::types::code
+#endif
+> DBCallback;
+
+typedef std::variant<
+    std::string
+#ifdef WITH_INTERCEPT
+    , intercept::types::game_value
+#endif
+> DBCallbackArg;
 
 typedef std::shared_ptr<DBConnector> DBConRef;
 
@@ -60,15 +78,6 @@ enum class DBExecutionType {
     ASYNC_CALLBACK,
     ASYNC_FUTURE,
     SYNC
-};
-
-/**
-* Container for the database statement options
-**/
-struct DBStatementOptions {
-    DBExecutionType type;
-    DBCallback callbackFnc;
-    std::optional<game_value> callbackArg;
 };
 
 /*

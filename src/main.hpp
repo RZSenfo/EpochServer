@@ -34,7 +34,7 @@ extern std::unique_ptr<EpochServer> server;
 
 
 // INTERCEPT
-#define WITH_INTERCEPT // TODO make it a CMAKE option
+// #define WITH_INTERCEPT // TODO make it a CMAKE option
 #ifdef WITH_INTERCEPT
 #include <intercept.hpp>
 #endif
