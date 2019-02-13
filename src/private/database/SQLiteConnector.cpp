@@ -56,7 +56,6 @@ SQLiteConnector::SQLiteConnector(const DBConfig& config) {
         catch (SQLite::Exception& e) {
             throw std::runtime_error("Failed to create the key value table");
         }
-         
     }
     else {
         throw std::runtime_error("Could not create to the sqlite database file");

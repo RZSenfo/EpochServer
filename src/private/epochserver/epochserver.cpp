@@ -219,6 +219,16 @@ void EpochServer::__setupSteamAPI(const rapidjson::Value& config) {
 
 EpochServer::~EpochServer() {}
 
+void EpochServer::insertCallback(SQFCallBackHandle&& cb) {
+
+    std::string x;
+    cb.toString(x);
+    std::pair<std::string, size_t> pair{ x, 0 };
+
+    std::unique_lock<std::mutex> lock(this->resultsMutex);
+    this->results.emplace(pair);
+}
+
 std::string EpochServer::getRandomString() {
     static std::random_device rd;
     static std::mt19937 gen(rd());
@@ -298,6 +308,8 @@ void EpochServer::log(const std::string& log) {
 }
 
 #define SET_RESULT(x,y) outCode = x; out = y;
+#define STR_MOVE(x) std::move(std::string(x))
+#define THROW_ARGS_INVALID_NUM(x) throw std::runtime_error(std::string("Invalid number of args for ") + x)
 
 // TODO test if moving args works
 int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const char *function, const char **args, int argsCnt) {
@@ -308,32 +320,32 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
     size_t fncLen = strlen(function);
 
     try {
-        if (fncLen == 3) {
-            this->callExtensionEntrypointByNumber(out, outCode, function, args, argsCnt);
+        if (fncLen == 2) {
+            this->callExtensionEntrypointByNumber(out, outCode, outputSize, function, args, argsCnt);
         }
         else if (!strncmp(function, "db", 2)) {
-            this->dbEntrypoint(out, outCode, function, args, argsCnt);
+            this->dbEntrypoint(out, outCode, outputSize, function, args, argsCnt);
         }
         else if (!strncmp(function, "be", 2)) {
-            this->beEntrypoint(out, outCode, function, args, argsCnt);
+            this->beEntrypoint(out, outCode, outputSize, function, args, argsCnt);
         }
         else if (!strcmp(function, "playerCheck")) {
-            this->callExtensionEntrypointByNumber(out, outCode, "300", args, argsCnt);
+            this->callExtensionEntrypointByNumber(out, outputSize, outCode, "30", args, argsCnt);
         }
-        else if (!strcmp(function, "extLog")) {
-            this->callExtensionEntrypointByNumber(out, outCode, "910", args, argsCnt);
+        else if (!strcmp(function, "log")) {
+            this->callExtensionEntrypointByNumber(out, outputSize, outCode, "91", args, argsCnt);
         }
         else if (!strcmp(function, "getCurrentTime")) {
-            this->callExtensionEntrypointByNumber(out, outCode, "000", args, argsCnt);
+            this->callExtensionEntrypointByNumber(out, outputSize, outCode, "00", args, argsCnt);
         }
         else if (!strcmp(function, "getRandomString")) {
-            this->callExtensionEntrypointByNumber(out, outCode, "010", args, argsCnt);
+            this->callExtensionEntrypointByNumber(out, outputSize, outCode, "01", args, argsCnt);
         }
         else if (!strcmp(function, "getStringMd5")) {
-            this->callExtensionEntrypointByNumber(out, outCode, "020", args, argsCnt);
+            this->callExtensionEntrypointByNumber(out, outputSize, outCode, "02", args, argsCnt);
         }
         else if (!strcmp(function, "version")) {
-            this->callExtensionEntrypointByNumber(out, outCode, "900", args, argsCnt);
+            this->callExtensionEntrypointByNumber(out, outputSize, outCode, "90", args, argsCnt);
         }
         else {
             SET_RESULT(1, "Unknown function");
@@ -347,16 +359,70 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
     return outCode;
 }
 
-void EpochServer::callExtensionEntrypointByNumber(std::string& out, int& outCode, const char *function, const char **args, int argsCnt) {
+void EpochServer::callExtensionEntrypointByNumber(std::string& out, int outputSize, int& outCode, const char *function, const char **args, int argsCnt) {
     switch (function[0]) {
+        // extension info
+        case '9': {
+            switch (function[1]) {
+                // extension callback poll
+                case '0': {
+                    if (this->resultsMutex.try_lock()) {
+                        if (this->results.empty()) {
+                            outCode = 101; // Empty
+                        }
+                        else {
+                            try {
+                                auto& res = this->results.front();
+                                if ((res.first.size() - res.second) > outputSize) {
+                                    // split up
+                                    out = std::string(res.first, res.second, outputSize);
+                                    outCode = 100; // Split msg
+                                    res.second += outputSize;
+                                }
+                                else {
+                                    // done -> pop
+                                    out = std::string(res.first, res.second);
+                                    this->results.pop();
+                                }
+                            }
+                            catch (...) {
+                                outCode = 103; // Error
+                            }
+                        }
+                        this->resultsMutex.unlock();
+                    }
+                    else {
+                        outCode = 102; // Busy
+                    }
+                    break;
+                }
+                // log
+                case '1': {
+                    if (argsCnt < 1) throw std::runtime_error("Nothing to log was provided");
+
+                    std::string msg = args[0];
+                    for (int i = 1; i < argsCnt; ++i) {
+                        msg += "\n";
+                        msg += args[i];
+                    }
+
+                    threadpool->fireAndForget([x = std::move(msg)]() {
+                        INFO(x);
+                    });
+                    break;
+                }
+                default: { SET_RESULT(1, "Unknown function"); }
+            }
+            break;
+        }
     // db
     case '1': {
-        this->dbEntrypoint(out, outCode, function, args, argsCnt);
+        this->dbEntrypoint(out, outputSize, outCode, function, args, argsCnt);
         break;
     }
     // be
     case '2': {
-        this->beEntrypoint(out, outCode, function, args, argsCnt);
+        this->beEntrypoint(out, outputSize, outCode, function, args, argsCnt);
         break;
     }
     // steamapi
@@ -374,7 +440,7 @@ void EpochServer::callExtensionEntrypointByNumber(std::string& out, int& outCode
                     SET_RESULT(1, "RCON NOT AVAILABLE");
                     return;
                 }
-                threadpool->fireAndForget([this, x = std::move(std::string(args[0]))]() {
+                threadpool->fireAndForget([this, x = STR_MOVE(args[0])]() {
                     std::string err;
                     if (this->steamApi && this->rcon && !this->steamApi->initialPlayerCheck(x, err)) {
                         this->rcon->add_ban(this->__getBattlEyeGUID(std::stoull(x)));
@@ -416,119 +482,58 @@ void EpochServer::callExtensionEntrypointByNumber(std::string& out, int& outCode
         }
         break;
     }
-    // extension info
-    case '9': {
-        switch (function[1]) {
-            // version
-            case '0': {
-                SET_RESULT(0, EXTENSION_VERSION);
-                break;
-            }
-            // log
-            case '1': {
-                if (argsCnt < 1) throw std::runtime_error("Nothing to log was provided");
-
-                std::string msg = args[0];
-                for (int i = 1; i < argsCnt; ++i) {
-                    msg += "\n";
-                    msg += args[i];
-                }
-
-                threadpool->fireAndForget([x = std::move(msg)]() {
-                    INFO(x);
-                });
-                break;
-            }
-            default: { SET_RESULT(1, "Unknown function"); }
-        }
-        break;
-    }
     default: { SET_RESULT(1, "Unknown function"); }
     };
 }
 
-void EpochServer::dbEntrypoint(std::string& out, int& outCode, const char *function, const char **args, int argsCnt) {
+void EpochServer::dbEntrypoint(std::string& out, int outputSize, int& outCode, const char *function, const char **args, int argsCnt) {
     
-    if (strlen(function) == 3) {
+    if (strlen(function) == 2) {
         switch(function[1]) {
-            // Poll
-            case '0': {
-                if (argsCnt < 2 || strlen(args[0]) == 0 || strlen(args[1]) == 0) {
-                    throw std::runtime_error("Invalid args for dbPoll");
-                }
-
-                unsigned long id = std::stoul(args[1]);
-
-                try {
-                    auto res = dbManager->tryPopResult(args[0], id);
-                    if (res.index() == 0) {
-                        SET_RESULT(0, std::get<std::string>(res));
-                    }
-                    else if (res.index() == 1) {
-                        SET_RESULT(0, std::to_string(std::get<bool>(res)));
-                    }
-                    else if (res.index() == 2) {
-                        SET_RESULT(0, std::to_string(std::get<int>(res)));
-                    }
-                    else if (res.index() == 3) {
-                        auto result = std::get< std::pair<std::string, int> >(res);
-                        SET_RESULT(0, "[" + result.first + "," + std::to_string(result.second) + "]");
-                    }
-                    else if (res.index() == 4) {
-                        auto result = std::get< std::vector<std::string> >(res);
-                        std::string str;
-                        if (result.empty()) {
-                            str = "[]";
-                        }
-                        else {
-                            str = "[";
-                            for (auto& x : result) {
-                                str += x;
-                                str += ',';
-                            }
-                            str[str.length() - 1] = ']';
-                        }
-                        SET_RESULT(0, str);
-                    }
-                }
-                catch (std::invalid_argument& e) {
-                    outCode = 2;
-                    throw std::runtime_error("Request not ready");
-                }
-                catch (std::out_of_range& e) {
-                    throw std::runtime_error("Request id unknown");
-                }
-                catch (std::exception& ex) {
-                    outCode = 3;
-                    throw std::runtime_error(std::string("Error occured for request: ") + ex.what());
-                }
-                break;
-            };
             // get
             case '1': {
-                if (argsCnt < 2) throw std::runtime_error("Not enough args given for get");
-                unsigned long id = this->dbManager->get<DBExecutionType::ASYNC_POLL>(args[0], args[1]);
-                SET_RESULT(0, std::to_string(id));
+                if (argsCnt == 2) {
+                    this->dbManager->get<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), std::nullopt, std::nullopt);
+                }
+                else if (argsCnt >= 3) {
+                    this->dbManager->get<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), STR_MOVE(args[2]), argsCnt >= 4 ? STR_MOVE(args[3]) : "[]");
+                }
+                else THROW_ARGS_INVALID_NUM("get");
                 break;
             };
             // getTtl
             case '2': {
-                if (argsCnt < 2) throw std::runtime_error("Not enough args given for getTtl");
-                unsigned long id = this->dbManager->getWithTtl<DBExecutionType::ASYNC_POLL>(args[0], args[1]);
-                SET_RESULT(0, std::to_string(id));
+                if (argsCnt == 2) {
+                    this->dbManager->getWithTtl<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), std::nullopt, std::nullopt);
+                }
+                else if (argsCnt >= 3) {
+                    this->dbManager->getWithTtl<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), STR_MOVE(args[2]), argsCnt >= 4 ? STR_MOVE(args[3]) : "[]");
+                }
+                else THROW_ARGS_INVALID_NUM("getTtl");
                 break;
             };
             // set
             case '3': {
-                if (argsCnt < 3) throw std::runtime_error("Not enough args given for set");
-                this->dbManager->set<DBExecutionType::ASYNC_CALLBACK>(args[0], args[1], args[2], std::nullopt, std::nullopt);
+                if (argsCnt == 3) {
+                    this->dbManager->set<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), STR_MOVE(args[2]), std::nullopt, std::nullopt);
+                }
+                else if (argsCnt >= 4) {
+                    this->dbManager->set<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), STR_MOVE(args[2]), STR_MOVE(args[3]), argsCnt >= 5 ? STR_MOVE(args[4]) : "[]");
+                }
+                else THROW_ARGS_INVALID_NUM("set");
                 break;
             };
             // setEx
             case '4': {
-                if (argsCnt < 4) throw std::runtime_error("Not enough args given for setEx");
-                int ttl = std::stoi(args[2]);
-                this->dbManager->setEx<DBExecutionType::ASYNC_CALLBACK>(args[0], args[1], ttl, args[3], std::nullopt, std::nullopt);
+                if (argsCnt == 4) {
+                    int ttl = std::stoi(args[2]);
+                    this->dbManager->setEx<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), ttl, STR_MOVE(args[3]), std::nullopt, std::nullopt);
+                }
+                else if (argsCnt >= 5) {
+                    int ttl = std::stoi(args[2]);
+                    this->dbManager->setEx<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), ttl, STR_MOVE(args[3]), STR_MOVE(args[4]), argsCnt >= 6 ? STR_MOVE(args[5]) : "[]");
+                }
+                else THROW_ARGS_INVALID_NUM("setEx");
                 break;
             };
             // query
@@ -537,32 +542,58 @@ void EpochServer::dbEntrypoint(std::string& out, int& outCode, const char *funct
             };
             // Exists
             case '6': {
-                if (argsCnt < 2) throw std::runtime_error("Not enough args given for exists");
-                unsigned long id = this->dbManager->exists<DBExecutionType::ASYNC_POLL>(args[0], args[1]);
-                SET_RESULT(0, std::to_string(id));
+                if (argsCnt == 2) {
+                    this->dbManager->exists<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), std::nullopt, std::nullopt);
+                }
+                else if (argsCnt >= 3) {
+                    this->dbManager->exists<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), STR_MOVE(args[2]), argsCnt >= 4 ? STR_MOVE(args[3]) : "[]");
+                }
+                else THROW_ARGS_INVALID_NUM("exists");
                 break;
             };
             // Expire
             case '7': {
-                if (argsCnt < 2) throw std::runtime_error("Not enough args given for expire");
-                int ttl = std::stoi(args[2]);
-                this->dbManager->expire<DBExecutionType::ASYNC_CALLBACK>(args[0], args[1], ttl, std::nullopt, std::nullopt);
+                if (argsCnt == 3) {
+                    int ttl = std::stoi(args[2]);
+                    this->dbManager->expire<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), ttl, std::nullopt, std::nullopt);
+                }
+                else if (argsCnt >= 4) {
+                    int ttl = std::stoi(args[2]);
+                    this->dbManager->expire<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), ttl, STR_MOVE(args[3]), argsCnt >= 5 ? STR_MOVE(args[4]) : "[]");
+                }
+                else THROW_ARGS_INVALID_NUM("expire");
                 break;
             };
             // del
             case '8': {
-                if (argsCnt < 2) throw std::runtime_error("Not enough args given for del");
-                this->dbManager->del<DBExecutionType::ASYNC_CALLBACK>(args[0], args[1], std::nullopt, std::nullopt);
+                if (argsCnt == 2) {
+                    this->dbManager->del<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), std::nullopt, std::nullopt);
+                }
+                else if (argsCnt >= 3) {
+                    this->dbManager->del<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), STR_MOVE(args[2]), argsCnt >= 4 ? STR_MOVE(args[3]) : "[]");
+                }
+                else THROW_ARGS_INVALID_NUM("del");
                 break;
             };
             // getRange
             case '9': {
-                if (argsCnt < 4) throw std::runtime_error("Not enough args given for getRange");
-                unsigned long from, to;
-                from = std::stoul(args[2]);
-                to = std::stoul(args[3]);
-                unsigned long id = this->dbManager->getRange<DBExecutionType::ASYNC_POLL>(args[0], args[1], from, to);
-                SET_RESULT(0, std::to_string(id));
+                if (argsCnt == 4) {
+                    unsigned long from, to;
+                    from = std::stoul(args[2]);
+                    to = std::stoul(args[3]);
+                    this->dbManager->getRange<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), from, to, std::nullopt, std::nullopt);
+                }
+                else if (argsCnt >= 5) {
+                    unsigned long from, to;
+                    from = std::stoul(args[2]);
+                    to = std::stoul(args[3]);
+                    this->dbManager->getRange<DBExecutionType::ASYNC_CALLBACK>(args[0], STR_MOVE(args[1]), from, to, STR_MOVE(args[4]), argsCnt >= 6 ? STR_MOVE(args[5]) : "[]");
+                }
+                else THROW_ARGS_INVALID_NUM("getRange");
+                break;
+            };
+            // TODO
+            case '0': {
                 break;
             };
             default: { SET_RESULT(1, "Unknown function"); };
@@ -572,71 +603,44 @@ void EpochServer::dbEntrypoint(std::string& out, int& outCode, const char *funct
         // skip prefix TODO test encoding.. might need to skipp more bytes
         function += 2;
 
-        if (!strcmp(function, "Poll")) {
-            // 0
-            this->dbEntrypoint(out, outCode, "100", args, argsCnt);
-        }
-        else if (!strcmp(function, "Get")) {
+        if (!strcmp(function, "Get")) {
             // 1
-            this->dbEntrypoint(out, outCode, "110", args, argsCnt);
+            this->dbEntrypoint(out, outputSize, outCode, "11", args, argsCnt);
         }
         else if (!strcmp(function, "Exists")) {
             // 6
-            this->dbEntrypoint(out, outCode, "160", args, argsCnt);
+            this->dbEntrypoint(out, outputSize, outCode, "16", args, argsCnt);
         }
         else if (!strcmp(function, "Set")) {
             // 3
-            this->dbEntrypoint(out, outCode, "130", args, argsCnt);
+            this->dbEntrypoint(out, outputSize, outCode, "13", args, argsCnt);
         }
         else if (!strcmp(function, "SetEx")) {
             // 4
-            this->dbEntrypoint(out, outCode, "140", args, argsCnt);
+            this->dbEntrypoint(out, outputSize, outCode, "14", args, argsCnt);
         }
         else if (!strcmp(function, "Expire")) {
             // 7
-            this->dbEntrypoint(out, outCode, "170", args, argsCnt);
+            this->dbEntrypoint(out, outputSize, outCode, "17", args, argsCnt);
         }
         else if (!strcmp(function, "Del")) {
             // 8
-            this->dbEntrypoint(out, outCode, "180", args, argsCnt);
+            this->dbEntrypoint(out, outputSize, outCode, "18", args, argsCnt);
         }
         else if (!strcmp(function, "Query")) {
-            // TODO
-            SET_RESULT(1, "TODO");
+            // 5
+            this->dbEntrypoint(out, outputSize, outCode, "15", args, argsCnt);
         }
         else if (!strcmp(function, "GetTtl")) {
             // 2
-            this->dbEntrypoint(out, outCode, "120", args, argsCnt);
-        }
-        else if (!strcmp(function, "SetSync")) {
-            if (argsCnt < 3) throw std::runtime_error("Not enough args given for set");
-            unsigned long id = this->dbManager->set<DBExecutionType::ASYNC_POLL>(args[0], args[1], args[2]);
-            SET_RESULT(0, std::to_string(id));
-        }
-        else if (!strcmp(function, "SetExSync")) {
-            if (argsCnt < 4) throw std::runtime_error("Not enough args given for setEx");
-            int ttl = std::stoi(args[2]);
-            unsigned long id = this->dbManager->setEx<DBExecutionType::ASYNC_POLL>(args[0], args[1], ttl, args[3]);
-            SET_RESULT(0, std::to_string(id));
-        }
-        else if (!strcmp(function, "ExpireSync")) {
-            if (argsCnt < 2) throw std::runtime_error("Not enough args given for expire");
-            int ttl = std::stoi(args[2]);
-            unsigned long id = this->dbManager->expire<DBExecutionType::ASYNC_POLL>(args[0], args[1], ttl);
-            SET_RESULT(0, std::to_string(id));
-        }
-        else if (!strcmp(function, "DelSync")) {
-            if (argsCnt < 2) throw std::runtime_error("Not enough args given for del");
-            unsigned long id = this->dbManager->del<DBExecutionType::ASYNC_POLL>(args[0], args[1]);
-            SET_RESULT(0, std::to_string(id));
+            this->dbEntrypoint(out, outputSize, outCode, "12", args, argsCnt);
         }
         else if (!strcmp(function, "GetRange")) {
             // 9
-            this->dbEntrypoint(out, outCode, "190", args, argsCnt);
+            this->dbEntrypoint(out, outputSize, outCode, "19", args, argsCnt);
         }
         else if (!strcmp(function, "Ping")) {
-            unsigned long id = this->dbManager->ping<DBExecutionType::ASYNC_POLL>(args[0]);
-            SET_RESULT(0, std::to_string(id));
+            this->dbManager->ping<DBExecutionType::ASYNC_CALLBACK>(args[0], std::nullopt, std::nullopt);
         }
         else {
             SET_RESULT(1, "Unknown db command");
@@ -644,14 +648,14 @@ void EpochServer::dbEntrypoint(std::string& out, int& outCode, const char *funct
     }
 }
 
-void EpochServer::beEntrypoint(std::string& out, int& outCode, const char *function, const char **args, int argsCnt) {
+void EpochServer::beEntrypoint(std::string& out, int outputSize, int& outCode, const char *function, const char **args, int argsCnt) {
     
     if (!this->rcon) {
         SET_RESULT(1, "RCON NOT AVAILABLE");
         return;
     }
 
-    if (strlen(function) == 3) {
+    if (strlen(function) == 2) {
         switch (function[1]) {
             // broadcast
             case '0': {
@@ -714,22 +718,22 @@ void EpochServer::beEntrypoint(std::string& out, int& outCode, const char *funct
     }
     else {
         if (!strcmp(function, "beBroadcastMessage")) {
-            this->beEntrypoint(out, outCode, "200", args, argsCnt);
+            this->beEntrypoint(out, outputSize, outCode, "20", args, argsCnt);
         }
         else if (!strcmp(function, "beKick")) {
-            this->beEntrypoint(out, outCode, "210", args, argsCnt);
+            this->beEntrypoint(out, outputSize, outCode, "21", args, argsCnt);
         }
         else if (!strcmp(function, "beBan")) {
-            this->beEntrypoint(out, outCode, "220", args, argsCnt);
+            this->beEntrypoint(out, outputSize, outCode, "22", args, argsCnt);
         }
         else if (!strcmp(function, "beShutdown")) {
-            this->beEntrypoint(out, outCode, "250", args, argsCnt);
+            this->beEntrypoint(out, outputSize, outCode, "25", args, argsCnt);
         }
         else if (!strcmp(function, "beLock")) {
-            this->beEntrypoint(out, outCode, "230", args, argsCnt);
+            this->beEntrypoint(out, outputSize, outCode, "23", args, argsCnt);
         }
         else if (!strcmp(function, "beUnlock")) {
-            this->beEntrypoint(out, outCode, "240", args, argsCnt);
+            this->beEntrypoint(out, outputSize, outCode, "24", args, argsCnt);
         }
         else {
             SET_RESULT(1, "Unknown be command");

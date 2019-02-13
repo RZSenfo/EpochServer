@@ -49,17 +49,11 @@ public:
     template <DBExecutionType T>\
     typename std::enable_if<T == DBExecutionType::ASYNC_CALLBACK, void >::type\
     fncname(const std::string& workerName, fncargtypes,\
-        const std::optional<std::variant<std::function<void(const DBReturn&)>, intercept::types::code> >& fnc,\
-        const std::optional<game_value>& args\
+        std::optional<DBCallback>&& fnc,\
+        std::optional<DBCallbackArg>&& args\
     ) {\
         auto worker = this->__getDbWorker(workerName);\
-        return worker->fncname< DBExecutionType::ASYNC_CALLBACK >(fncargs, fnc, args);\
-    };\
-    template <DBExecutionType T>\
-    typename std::enable_if<T == DBExecutionType::ASYNC_POLL, unsigned long>::type\
-    fncname(const std::string& workerName, fncargtypes) {\
-        auto worker = this->__getDbWorker(workerName);\
-        return worker->fncname< DBExecutionType::ASYNC_POLL >(fncargs);\
+        return worker->fncname< DBExecutionType::ASYNC_CALLBACK >(fncargs, std::move(fnc), std::move(args));\
     };\
     template <DBExecutionType T>\
     typename std::enable_if<T == DBExecutionType::SYNC, DBReturn>::type\
@@ -77,18 +71,12 @@ public:
     };\
     template <DBExecutionType T>\
     typename std::enable_if<T == DBExecutionType::ASYNC_CALLBACK, void >::type\
-    fncname(const std::string& workername,\
-        const std::optional<std::variant<std::function<void(const DBReturn&)>, intercept::types::code> >& fnc,\
-        const std::optional<game_value>& args\
+    fncname(const std::string& workerName,\
+        std::optional<DBCallback>&& fnc,\
+        std::optional<DBCallbackArg>&& args\
     ) {\
         auto worker = this->__getDbWorker(workerName);\
-        return worker->fncname< DBExecutionType::ASYNC_CALLBACK >(fnc, args);\
-    };\
-    template <DBExecutionType T>\
-    typename std::enable_if<T == DBExecutionType::ASYNC_POLL, unsigned long>::type\
-    fncname(const std::string& workerName) {\
-        auto worker = this->__getDbWorker(workerName);\
-        return worker->fncname< DBExecutionType::ASYNC_POLL >();\
+        return worker->fncname< DBExecutionType::ASYNC_CALLBACK >(std::move(fnc), std::move(args));\
     };\
     template <DBExecutionType T>\
     typename std::enable_if<T == DBExecutionType::SYNC, DBReturn>::type\
@@ -103,7 +91,7 @@ public:
     *  \param pattern const std::string&
     **/
 
-    CREATE_DBM_FUNCTION(keys, const std::string& prefix, prefix);
+    CREATE_DBM_FUNCTION(keys, std::string&& prefix, std::move(prefix));
 
     /**
     *  \brief DB GET  Args are moved!
@@ -111,7 +99,7 @@ public:
     *  \param key const std::string&
     **/
 
-    CREATE_DBM_FUNCTION(get, const std::string& key, key);
+    CREATE_DBM_FUNCTION(get, std::string&& key, std::move(key));
 
     /**
     *  \brief DB GETRANGE  Args are moved!
@@ -121,21 +109,21 @@ public:
     *  \param to unsigned int
     *
     **/
-    CREATE_DBM_FUNCTION(getRange, DBM_CREATION_HELPER(const std::string& key, unsigned int from, unsigned int to), DBM_CREATION_HELPER(key,from,to));
+    CREATE_DBM_FUNCTION(getRange, DBM_CREATION_HELPER(std::string&& key, unsigned int from, unsigned int to), DBM_CREATION_HELPER(std::move(key),from,to));
 
     /**
     *  \brief DB GETTTL  Args are moved!
     *
     *  \param key const std::string&
     **/
-    CREATE_DBM_FUNCTION(getWithTtl, const std::string& key, key);
+    CREATE_DBM_FUNCTION(getWithTtl, std::string&& key, std::move(key));
 
     /**
     *  \brief DB EXISTS  Args are moved!
     *
     *  \param key const std::string&
     **/
-    CREATE_DBM_FUNCTION(exists, const std::string& key, key);
+    CREATE_DBM_FUNCTION(exists, std::string&& key, std::move(key));
 
     /**
     *  \brief DB SET  Args are moved!
@@ -143,7 +131,7 @@ public:
     *  \param key const std::string&
     *  \param value const std::string&
     **/
-    CREATE_DBM_FUNCTION(set, DBM_CREATION_HELPER(const std::string& key, const std::string& value), DBM_CREATION_HELPER(key, value));
+    CREATE_DBM_FUNCTION(set, DBM_CREATION_HELPER(std::string&& key, std::string&& value), DBM_CREATION_HELPER(std::move(key), std::move(value)));
 
     /**
     *  \brief DB SETEX  Args are moved!
@@ -152,7 +140,7 @@ public:
     *  \param ttl int
     *  \param value const std::string&
     **/
-    CREATE_DBM_FUNCTION(setEx, DBM_CREATION_HELPER(const std::string& key, int ttl, const std::string& value), DBM_CREATION_HELPER(key,ttl,value));
+    CREATE_DBM_FUNCTION(setEx, DBM_CREATION_HELPER(std::string&& key, int ttl, std::string&& value), DBM_CREATION_HELPER(std::move(key),ttl,std::move(value)));
 
 
     /**
@@ -162,21 +150,21 @@ public:
     *  \param value const std::string&
     *  \param ttl int
     **/
-    CREATE_DBM_FUNCTION(expire, DBM_CREATION_HELPER(const std::string& key, int ttl), DBM_CREATION_HELPER(key,ttl));
+    CREATE_DBM_FUNCTION(expire, DBM_CREATION_HELPER(std::string&& key, int ttl), DBM_CREATION_HELPER(std::move(key),ttl));
 
     /**
     *  \brief DB DEL  Args are moved!
     *
     *  \param key const std::string&
     **/
-    CREATE_DBM_FUNCTION(del, const std::string& key, key);
+    CREATE_DBM_FUNCTION(del, std::string&& key, std::move(key));
 
     /**
     *  \brief DB TTL  Args are moved!
     *
     *  \param key const std::string&
     **/
-    CREATE_DBM_FUNCTION(ttl, const std::string& key, key);
+    CREATE_DBM_FUNCTION(ttl, std::string&& key, std::move(key));
 
     /**
     *  \brief DB PING

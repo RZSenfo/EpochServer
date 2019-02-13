@@ -16,6 +16,19 @@
 #include <rapidjson/error/error.h>
 #include <rapidjson/istreamwrapper.h>
 
+struct SQFCallBackHandle {
+    std::string result;
+
+    std::string function;
+    bool functionIsCode = false;
+
+    std::string extraArg;
+
+    void toString(std::string& out) {
+        out.reserve(9 + result.size() + function.size() + extraArg.size());
+        out = "[\"" + function + "\"," + std::to_string(functionIsCode) + "," + result + ",\"" + (extraArg.empty() ? "" : extraArg) + "\"]";
+    }
+};
 
 class EpochServer {
 private:
@@ -44,9 +57,28 @@ private:
     void __setupRCON(const rapidjson::Value& config);
     void __setupSteamAPI(const rapidjson::Value& config);
 
-    void dbEntrypoint(std::string& out, int& outCode, const char *function, const char **args, int argsCnt);
-    void beEntrypoint(std::string& out, int& outCode, const char *function, const char **args, int argsCnt);
-    void callExtensionEntrypointByNumber(std::string& out, int& outCode, const char *function, const char **args, int argsCnt);
+    void dbEntrypoint(std::string& out, int outputSize, int& outCode, const char *function, const char **args, int argsCnt);
+    void beEntrypoint(std::string& out, int outputSize, int& outCode, const char *function, const char **args, int argsCnt);
+    void callExtensionEntrypointByNumber(std::string& out, int outputSize, int& outCode, const char *function, const char **args, int argsCnt);
+
+    /**
+    * Results (only for callback polling)
+    **/
+
+    std::queue< std::pair<std::string, size_t> > results; /*!< results storage */
+
+    std::mutex resultsMutex; /*!< mutex for results storage */
+
+    /**
+    *   \brief Internal method to insert future into result storage
+    *
+    *   Handles insertion into result storage
+    *
+    *   \param statement DBStatementOptions Options for the executed statement
+    *   \param result std::shared_future<DBReturn> future to the result of the Database call
+    *
+    **/
+    void insertCallback(SQFCallBackHandle&& cb);
 
 public:
     
