@@ -3,13 +3,16 @@
 
 #define EXTENSION_VERSION "0.1.0"
 
+// TODO create Threadpool and Logger singleton
+
+// GENERAL PURPOSE TYPE DEFS
+typedef unsigned long long uint64;
+typedef unsigned char uint8;
+
 // LOGGING
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/fmt/ostr.h>
-
-
-// TODO create Threadpool and Logger singleton
 
 #define INFO logging::logfile->info
 #define DEBUG logging::logfile->debug
@@ -20,15 +23,15 @@ namespace logging {
     extern std::shared_ptr<spdlog::logger> logfile;
 }
 
-// GENERAL PURPOSE TYPE DEFS
-typedef unsigned long long uint64;
-typedef unsigned char uint8;
-
 // THREADPOOL
 #include <ThreadPool.hpp>
 
 /*!< pointer to the threadpool (main.cpp) */
 extern std::unique_ptr<ThreadPool> threadpool;
+
+class EpochServer; /*!< Forward declare */
+extern std::unique_ptr<EpochServer> server;
+
 
 // INTERCEPT
 #define WITH_INTERCEPT // TODO make it a CMAKE option
