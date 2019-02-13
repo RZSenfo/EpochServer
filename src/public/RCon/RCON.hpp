@@ -50,6 +50,11 @@ class RCON {
 
 public:
     
+    RCON(const RCON&) = delete;
+    RCON& operator=(const RCON&) = delete;
+    RCON(RCON&&) = delete;
+    RCON& operator=(RCON&&) = delete;
+
     RCON(const std::string& host, int port, const std::string& pw);
     ~RCON();
     
