@@ -26,6 +26,10 @@ private:
 
 public:
 
+    MySQLConnector(const MySQLConnector&) = delete;
+    MySQLConnector& operator=(const MySQLConnector&) = delete;
+    MySQLConnector(MySQLConnector&&) = delete;
+    MySQLConnector& operator=(MySQLConnector&&) = delete;
 
     MySQLConnector(const DBConfig& config);
     ~MySQLConnector();

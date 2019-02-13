@@ -14,6 +14,12 @@ private:
     DBConfig config;
     
 public:
+
+    RedisConnector(const RedisConnector&) = delete;
+    RedisConnector& operator=(const RedisConnector&) = delete;
+    RedisConnector(RedisConnector&&) = delete;
+    RedisConnector& operator=(RedisConnector&&) = delete;
+
     RedisConnector(const DBConfig& Config);
     ~RedisConnector();
 

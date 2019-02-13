@@ -40,6 +40,11 @@ private:
 
 public:
 
+    SQLiteConnector(const SQLiteConnector&) = delete;
+    SQLiteConnector& operator=(const SQLiteConnector&) = delete;
+    SQLiteConnector(SQLiteConnector&&) = delete;
+    SQLiteConnector& operator=(SQLiteConnector&&) = delete;
+
     SQLiteConnector(const DBConfig& config);
     ~SQLiteConnector();
 
