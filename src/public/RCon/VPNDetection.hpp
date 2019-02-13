@@ -44,6 +44,11 @@ private:
 
 public:
 
+    VPNDetection(const VPNDetection&) = delete;
+    VPNDetection& operator=(const VPNDetection&) = delete;
+    VPNDetection(VPNDetection&&) = delete;
+    VPNDetection& operator=(VPNDetection&&) = delete;
+
     /**
     *   \brief tries to detect usage of vpn
     **/
