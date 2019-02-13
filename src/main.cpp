@@ -55,6 +55,8 @@ void __stdcall RVExtension(char *_output, int _outputSize, char *_function) {
 void RVExtension(char *_output, int _outputSize, char *_function) {
 #endif
     strncpy_s(_output, _outputSize, "Unsupported", _TRUNCATE);
+}
+
 /*
     Version
 */
