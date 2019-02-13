@@ -15,11 +15,13 @@
 
 #ifdef WIN32
 extern "C" {
+    __declspec (dllexport) void __stdcall RVExtensionVersion(char *output, int outputSize);
     __declspec (dllexport) void __stdcall RVExtension(char *output, int outputSize, char *function);
     __declspec (dllexport) int __stdcall RVExtensionArgs(char *output, int outputSize, const char *function, const char **args, int argsCnt);
 };
 #else
 extern "C" {
+    void RVExtensionVersion(char *output, int outputSize);
     void RVExtension (char* output, int outputSize, char* function);
     int RVExtensionArgs(char *output, int outputSize, const char *function, const char **args, int argsCnt);
 };
@@ -53,6 +55,12 @@ void __stdcall RVExtension(char *_output, int _outputSize, char *_function) {
 void RVExtension(char *_output, int _outputSize, char *_function) {
 #endif
     strncpy_s(_output, _outputSize, "Unsupported", _TRUNCATE);
+/*
+    Version
+*/
+void __stdcall RVExtensionVersion(char *output, int outputSize) {
+    //--- max outputSize is 32 bytes
+    strncpy_s(output, outputSize, EXTENSION_VERSION, _TRUNCATE);
 }
 
 void extensionInit() {
