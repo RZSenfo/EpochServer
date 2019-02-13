@@ -39,8 +39,11 @@ typedef std::variant<
 > DBReturn;
 
 /**
-* Type/Variant of the callback - string: missionnamespace variable, code: actual function code, lambda: use of dbworker as API (internal)
-* if you need external args in lambda, just bind them
+* Type/Variant of the callback:
+*    string: missionnamespace variable or string of code
+*    code: actual function code
+*    lambda: use of dbworker as API (internal)
+* if you need external args in lambda, just bind them (they have to be copyable tho)
 **/
 typedef std::variant<std::string, intercept::types::code, std::function<void(const DBReturn&)> > DBCallback;
 typedef std::variant<std::string, intercept::types::game_value > DBCallbackArg;
@@ -56,7 +59,6 @@ typedef std::shared_ptr<DBConnector> DBConRef;
 enum class DBExecutionType {
     ASYNC_CALLBACK,
     ASYNC_FUTURE,
-    ASYNC_POLL,
     SYNC
 };
 
@@ -121,18 +123,40 @@ private:
     DBConRef getConnector();
 
     template<typename E>
-    std::function<DBReturn()> getFncWrapper(
+    inline std::function<DBReturn()> getFncWrapper(
         E&& errorValue,
         std::function<DBReturn(const DBConRef& ref)>&& f
-    );
+    ) {
+        return [this, errorValue = std::move(errorValue), fnc = std::move(f)](){
+            try {
+                auto& db = this->getConnector();
+                DBReturn result = fnc(db);
+                return result;
+            }
+            catch (std::exception& e) {
+                return static_cast<DBReturn>(errorValue);
+            }
+        };
+    }
 
     template<typename E>
-    std::function<void()> getFncWrapper(
+    inline std::function<void()> getFncWrapper(
         E&& errorValue,
         std::function<DBReturn(const DBConRef& ref)>&& fnc,
         std::optional<DBCallback>&& callback,
         std::optional<DBCallbackArg>&& args
-    );
+    ) {
+        return [this, errorValue = std::move(errorValue), fnc = std::move(fnc),
+            callback = std::move(callback), args = std::move(args)
+        ](){
+            try {
+                auto& db = this->getConnector();
+                DBReturn result = fnc(db);
+                this->callbackResultIfNeeded(result, callback, args);
+            }
+            catch (std::exception& e) {}
+        };
+    }
 
 public:
 
@@ -157,14 +181,14 @@ public:
 
 #define CREATE_FUNCTION(fncname, defaultreturn, lambda, ...) \
     template <DBExecutionType T>\
-    typename std::enable_if<T == DBExecutionType::ASYNC_FUTURE, std::shared_future<DBReturn> >::type\
+    inline std::enable_if_t<T == DBExecutionType::ASYNC_FUTURE, std::shared_future<DBReturn> >\
     fncname(__VA_ARGS__) {\
         return threadpool->enqueue(\
             this->getFncWrapper(defaultreturn, lambda);\
         ).share();\
     };\
     template <DBExecutionType T>\
-    typename std::enable_if<T == DBExecutionType::ASYNC_CALLBACK, void >::type\
+    inline std::enable_if_t<T == DBExecutionType::ASYNC_CALLBACK, void >\
     fncname(__VA_ARGS__,\
         std::optional<DBCallback>&& fnc,\
         std::optional<DBCallbackArg>&& args\
@@ -174,7 +198,7 @@ public:
         );\
     };\
     template <DBExecutionType T>\
-    typename std::enable_if<T == DBExecutionType::SYNC, DBReturn >::type\
+    inline std::enable_if_t<T == DBExecutionType::SYNC, DBReturn >\
     fncname(__VA_ARGS__) {\
         return (this->getFncWrapper(defaultreturn, lambda))();\
     };
@@ -182,14 +206,14 @@ public:
 // TODO find a alternative to __VA_OPT__(,) and merge this into CREATE_FUNCTION
 #define CREATE_FUNCTION_NO_ARGS(fncname, defaultreturn, lambda) \
     template <DBExecutionType T>\
-    typename std::enable_if<T == DBExecutionType::ASYNC_FUTURE, std::shared_future<DBReturn> >::type\
+    inline std::enable_if_t<T == DBExecutionType::ASYNC_FUTURE, std::shared_future<DBReturn> >\
     fncname() {\
         return threadpool->enqueue(\
             this->getFncWrapper(defaultreturn, lambda);\
         ).share();\
     };\
     template <DBExecutionType T>\
-    typename std::enable_if<T == DBExecutionType::ASYNC_CALLBACK, void >::type\
+    inline std::enable_if_t<T == DBExecutionType::ASYNC_CALLBACK, void >\
     fncname(\
         std::optional<DBCallback>&& fnc,\
         std::optional<DBCallbackArg>&& args\
@@ -199,7 +223,7 @@ public:
         );\
     };\
     template <DBExecutionType T>\
-    typename std::enable_if<T == DBExecutionType::SYNC, DBReturn >::type\
+    inline std::enable_if_t<T == DBExecutionType::SYNC, DBReturn >\
     fncname() {\
         return (this->getFncWrapper(defaultreturn, lambda))();\
     };

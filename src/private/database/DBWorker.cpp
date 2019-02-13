@@ -94,34 +94,3 @@ DBConRef DBWorker::getConnector() {
     this->dbConnectors[newID].first = tid;
     return connector;
 }
-
-template<typename E>
-std::function<DBReturn()> DBWorker::getFncWrapper(E&& errorValue, std::function<DBReturn(const DBConRef& ref)>&& f) {
-    return [this, errorValue = std::move(errorValue), fnc = std::move(f)](){
-        try {
-            auto& db = this->getConnector();
-            DBReturn result = fnc(db);
-            return result;
-        }
-        catch (std::exception& e) {
-            return static_cast<DBReturn>(errorValue);
-        }
-    };
-}
-
-template<typename E>
-std::function<void()> DBWorker::getFncWrapper(E&& errorValue, std::function<DBReturn(const DBConRef& ref)>&& fnc,
-    std::optional<DBCallback>&& callback,
-    std::optional<DBCallbackArg>&& args
-) {
-    return [this, errorValue = std::move(errorValue), fnc = std::move(fnc),
-        callback = std::move(callback), args = std::move(args)
-    ](){
-        try {
-            auto& db = this->getConnector();
-            DBReturn result = fnc(db);
-            this->callbackResultIfNeeded(result, callback, args);
-        }
-        catch (std::exception& e) {}
-    };
-}

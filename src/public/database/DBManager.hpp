@@ -41,13 +41,13 @@ public:
 #define DBM_CREATION_HELPER(...) __VA_ARGS__
 #define CREATE_DBM_FUNCTION(fncname, fncargtypes, fncargs) \
     template <DBExecutionType T>\
-    typename std::enable_if<T == DBExecutionType::ASYNC_FUTURE, std::shared_future<DBReturn> >::type\
+    inline std::enable_if_t<T == DBExecutionType::ASYNC_FUTURE, std::shared_future<DBReturn> >\
     fncname(const std::string& workerName, fncargtypes) {\
         auto worker = this->__getDbWorker(workerName);\
         return worker->fncname< DBExecutionType::ASYNC_FUTURE >(fncargs);\
     };\
     template <DBExecutionType T>\
-    typename std::enable_if<T == DBExecutionType::ASYNC_CALLBACK, void >::type\
+    inline std::enable_if_t<T == DBExecutionType::ASYNC_CALLBACK, void >\
     fncname(const std::string& workerName, fncargtypes,\
         std::optional<DBCallback>&& fnc,\
         std::optional<DBCallbackArg>&& args\
@@ -56,7 +56,7 @@ public:
         return worker->fncname< DBExecutionType::ASYNC_CALLBACK >(fncargs, std::move(fnc), std::move(args));\
     };\
     template <DBExecutionType T>\
-    typename std::enable_if<T == DBExecutionType::SYNC, DBReturn>::type\
+    inline std::enable_if_t<T == DBExecutionType::SYNC, DBReturn>\
     fncname(const std::string& workerName, fncargtypes) {\
         auto worker = this->__getDbWorker(workerName);\
         return worker->fncname< DBExecutionType::SYNC >(fncargs);\
@@ -64,13 +64,13 @@ public:
 
 #define CREATE_DBM_FUNCTION_NO_ARGS(fncname) \
     template <DBExecutionType T>\
-    typename std::enable_if<T == DBExecutionType::ASYNC_FUTURE, std::shared_future<DBReturn> >::type\
+    inline std::enable_if_t<T == DBExecutionType::ASYNC_FUTURE, std::shared_future<DBReturn> >\
     fncname(const std::string& workerName) {\
         auto worker = this->__getDbWorker(workerName);\
         return worker->fncname< DBExecutionType::ASYNC_FUTURE >();\
     };\
     template <DBExecutionType T>\
-    typename std::enable_if<T == DBExecutionType::ASYNC_CALLBACK, void >::type\
+    inline std::enable_if_t<T == DBExecutionType::ASYNC_CALLBACK, void >\
     fncname(const std::string& workerName,\
         std::optional<DBCallback>&& fnc,\
         std::optional<DBCallbackArg>&& args\
@@ -79,7 +79,7 @@ public:
         return worker->fncname< DBExecutionType::ASYNC_CALLBACK >(std::move(fnc), std::move(args));\
     };\
     template <DBExecutionType T>\
-    typename std::enable_if<T == DBExecutionType::SYNC, DBReturn>::type\
+    inline std::enable_if_t<T == DBExecutionType::SYNC, DBReturn>\
     fncname(const std::string& workerName) {\
         auto worker = this->__getDbWorker(workerName);\
         return worker->fncname< DBExecutionType::SYNC >();\
