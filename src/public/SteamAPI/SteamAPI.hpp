@@ -66,6 +66,12 @@ private:
     int minAccountAge = 0; // in days
 
 public:
+
+    SteamAPI(const SteamAPI&) = delete;
+    SteamAPI& operator=(const SteamAPI&) = delete;
+    SteamAPI(SteamAPI&&) = delete;
+    SteamAPI& operator=(SteamAPI&&) = delete;
+
     SteamAPI(const std::string& APIKey);
     ~SteamAPI();
 
