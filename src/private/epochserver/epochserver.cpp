@@ -268,14 +268,11 @@ std::vector<std::string> EpochServer::getStringMd5(const std::vector<std::string
 }
 
 std::string EpochServer::getCurrentTime() {
-    
-    time_t     now = time(0);
-    struct tm  tstruct;
-    char       buf[80];
-    tstruct = *localtime(&now);
-    strftime(buf, sizeof(buf), "[%Y,%m,%d,%H,%M,%S]", &tstruct);
-
-    return buf;
+    std::stringstream buffer;
+    auto t = std::time(nullptr);
+    auto tm = std::localtime(&t);
+    buffer << std::put_time(tm, "[%Y,%m,%d,%H,%M,%S]");
+    return buffer.str();
 }
 
 std::string EpochServer::__getBattlEyeGUID(uint64 _steamId) {
