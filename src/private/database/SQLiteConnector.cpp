@@ -20,7 +20,8 @@ SQLiteConnector::SQLiteConnector(const DBConfig& config) {
         }
 
     }
-    catch (SQLite::Exception& e) {   
+    catch (SQLite::Exception& e) {
+        WARNING(std::string("Error during SQLLite Setup: ") + e.what());
     }
 
     if (!ref || !ref->SQLiteDB) {
@@ -85,7 +86,7 @@ std::vector< std::string > SQLiteConnector::keys(const std::string& prefix) {
         std::vector< std::string > ret;
 
         while (query.executeStep()) {
-            ret.emplace_back(query.getColumn(0));
+            ret.emplace_back(query.getColumn(0).getString());
         }
 
         return ret;
