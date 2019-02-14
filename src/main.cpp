@@ -88,7 +88,7 @@ void extensionInit() {
         3
     );
     logging::logfile->flush_on(spdlog::level::debug);
-    spdlog::set_pattern("[%H:%M:%S]-{%l}- %v");
+    spdlog::set_pattern("[%T]-{%l}-%v-%@");
 
     server = std::make_unique<EpochServer>();
 }

@@ -14,9 +14,9 @@ typedef unsigned char uint8;
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/fmt/ostr.h>
 
-#define INFO logging::logfile->info
-#define DEBUG logging::logfile->debug
-#define WARNING logging::logfile->warn
+#define INFO(x) logging::logfile->log(spdlog::source_loc(__FILE__, __LINE__, ""), spdlog::level::info, x)
+#define DEBUG(x) logging::logfile->log(spdlog::source_loc(__FILE__, __LINE__, ""), spdlog::level::debug, x)
+#define WARNING(x) logging::logfile->log(spdlog::source_loc(__FILE__, __LINE__, ""), spdlog::level::warn, x)
 
 namespace logging {
     // (main.cpp)
