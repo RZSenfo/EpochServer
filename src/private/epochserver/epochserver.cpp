@@ -443,8 +443,9 @@ void EpochServer::callExtensionEntrypointByNumber(std::string& out, int outputSi
                 threadpool->fireAndForget([this, x = STR_MOVE(args[0])]() {
                     std::string err;
                     if (this->steamApi && this->rcon && !this->steamApi->initialPlayerCheck(x, err)) {
-                        this->rcon->add_ban(this->__getBattlEyeGUID(std::stoull(x)));
-                        this->rcon->kick(this->__getBattlEyeGUID(std::stoull(x)));
+                        auto guid = this->__getBattlEyeGUID(std::stoull(x));
+                        this->rcon->add_ban(guid);
+                        this->rcon->kick(guid);
                     }
                 });
                 break;
