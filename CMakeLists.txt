@@ -238,3 +238,11 @@ INCLUDE_DIRECTORIES( ${PROJECT_SOURCE_DIR}/deps/asio/include )
 ADD_SUBDIRECTORY( src )
 
 GET_TARGET_PROPERTY( TARGET_LIBRARIES ${INTERCEPT_PLUGIN_NAME} LINK_LIBRARIES )
+
+##############################################################################
+##
+## extension test programm
+##
+##############################################################################
+
+ADD_SUBDIRECTORY( test )
