@@ -16,9 +16,13 @@ EpochServer::EpochServer() {
     
     bool error = false;
     
+    auto cur_path = std::filesystem::path();
+    INFO( std::string("Looking for Server config file.. (Base: ") + cur_path.generic_string() + ")" );
+
     std::filesystem::path configFilePath("@epochserver/config.json");
     if (!std::filesystem::exists(configFilePath)) {
-        throw std::runtime_error("Configfile not found! Must be @epochserver/config.json");
+        WARNING("Configfile not found! Must be @epochserver/config.json");
+        std::exit(1);
     }
 
     std::ifstream ifs(configFilePath.string());
@@ -321,13 +325,13 @@ int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const cha
 
     try {
         if (fncLen == 2) {
-            this->callExtensionEntrypointByNumber(out, outCode, outputSize, function, args, argsCnt);
+            this->callExtensionEntrypointByNumber(out, outputSize, outCode, function, args, argsCnt);
         }
         else if (!strncmp(function, "db", 2)) {
-            this->dbEntrypoint(out, outCode, outputSize, function, args, argsCnt);
+            this->dbEntrypoint(out, outputSize, outCode, function, args, argsCnt);
         }
         else if (!strncmp(function, "be", 2)) {
-            this->beEntrypoint(out, outCode, outputSize, function, args, argsCnt);
+            this->beEntrypoint(out, outputSize, outCode, function, args, argsCnt);
         }
         else if (!strcmp(function, "playerCheck")) {
             this->callExtensionEntrypointByNumber(out, outputSize, outCode, "30", args, argsCnt);
@@ -663,7 +667,7 @@ void EpochServer::beEntrypoint(std::string& out, int outputSize, int& outCode, c
                     dur = std::stoi(args[2]);
                 }
                 catch (...) {
-                    WARNING(static_cast<std::string>("Could not parse banDuration, fallback to permaban. GUID: ") + args[0]);
+                    WARNING(std::string("Could not parse banDuration, fallback to permaban. GUID: ") + args[0]);
                 }
             }
             threadpool->fireAndForget([this, uid = std::string(args[0]), msg = std::move(msg), dur]() {

@@ -18,9 +18,8 @@
 #include <stdio.h>
 
 
-
-
 typedef void (STDCALL *fnc)(char *output, int outputSize, const char *function, const char **args, int argCnt);
+typedef void (STDCALL *RVExtensionVersion)(char *output, int outputSize);
 
 
 int main() {
@@ -40,11 +39,35 @@ int main() {
 
 	std::cout << "Successfully loaded the dynamic library!" << std::endl;
 
+    
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
+
+    RVExtensionVersion version = (RVExtensionVersion)GetProcAddress(hinstDLL, "_RVExtensionVersion@8");
+    if (!version) {
+        std::cout << "Could not locate the entry function!" << std::endl;
+        return 1;
+    }
+#else
+    fnc func = (fnc)dlsym(hinstDLL, "RVExtensionVersion");
+    const char *dlsym_error = dlerror();
+    if (dlsym_error) {
+        std::cout << "Could not locate the entry function!" << std::endl;
+        dlclose(hinstDLL);
+        return 1;
+    }
+#endif
+
+    char veroutput[8050];
+    version(veroutput, 8000);
+
+
+    std::cout << "Version:" << veroutput << std::endl;
+
 	// resolve function address
 
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
 
-	fnc func = (fnc)GetProcAddress(hinstDLL, "_RVExtensionArgs@12");
+	fnc func = (fnc)GetProcAddress(hinstDLL, "_RVExtensionArgs@20");
 	if (!func) {
 		std::cout << "Could not locate the entry function!" << std::endl;
 		return 1;
@@ -68,7 +91,8 @@ int main() {
 	
 		std::cout << "Enter the function args (empty to finish): ";
 
-		std::vector<std::string> args;
+        std::vector<std::string> args_str;
+		std::vector<const char *> args;
 
 		while (true) {
 			std::string arg;
@@ -77,19 +101,15 @@ int main() {
 			if (arg.empty()) {
 				break;
 			} else {
-				args.emplace_back(arg);
+                args_str.emplace_back(arg);
+				args.emplace_back(args_str.back().c_str());
 			}
 		}
 
-		const char * a[20];
-		for (size_t i = 0; i < args.size(); ++i) {
-			a[i] = args[i].c_str();
-		}
-
-		char output[8050];
-		func(output, 8000, callfunction.c_str(), a, args.size());
+        std::string output(8000, ' ');
+		func(output.data(), output.size(), callfunction.c_str(), args.data(), args.size());
 		
-		std::cout << "The extension returned: " << output << std::endl << std::endl;
+		std::cout << "The extension returned: " << output.c_str() << std::endl << std::endl;
 
 	};
 

@@ -35,36 +35,6 @@ namespace logging {
     std::shared_ptr<spdlog::logger> logfile;
 }
 
-/*
-    RVExtension (Extension main call)
-*/
-#ifdef WIN32
-int __stdcall RVExtensionArgs(char *output, int outputSize, const char *function, const char **args, int argsCnt) {
-#elif __linux__
-int RVExtensionArgs(char *output, int outputSize, const char *function, const char **args, int argsCnt) {
-#endif
-    return server->callExtensionEntrypoint(output, outputSize, function, args, argsCnt);
-}
-
-/*
-    Only alternative syntax
-*/
-#ifdef WIN32
-void __stdcall RVExtension(char *_output, int _outputSize, char *_function) {
-#elif __linux__
-void RVExtension(char *_output, int _outputSize, char *_function) {
-#endif
-    strncpy_s(_output, _outputSize, "Unsupported", _TRUNCATE);
-}
-
-/*
-    Version
-*/
-void __stdcall RVExtensionVersion(char *output, int outputSize) {
-    //--- max outputSize is 32 bytes
-    strncpy_s(output, outputSize, EXTENSION_VERSION, _TRUNCATE);
-}
-
 void extensionInit() {
     
     //init threadpool
@@ -78,8 +48,6 @@ void extensionInit() {
     threadpool = std::make_unique<ThreadPool>(hwc);
 
     // init logging
-    server = std::make_unique<EpochServer>();
-    logging::logfile = std::shared_ptr<spdlog::logger>{};
     spdlog::set_level(spdlog::level::debug);
     logging::logfile = spdlog::rotating_logger_mt(
         "logfile",
@@ -94,10 +62,10 @@ void extensionInit() {
 }
 
 void extensionDeInit() {
-    logging::logfile->flush();
+    threadpool.reset();
+    //logging::logfile->flush();
     spdlog::drop_all();
 
-    threadpool.reset();
 }
 
 #ifdef WIN32
@@ -105,7 +73,6 @@ void extensionDeInit() {
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved) {
     switch (ul_reason_for_call) {
         case DLL_PROCESS_ATTACH: {
-            extensionInit();
             break;
         }
         case DLL_THREAD_ATTACH: {
@@ -127,10 +94,46 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
 
 #include <dlfcn.h>
 static void __attribute__((constructor)) dll_load(void) {
-    extensionInit();
 }
 
 static void __attribute__((destructor)) dll_unload(void) {
     extensionDeInit();
 }
 #endif
+
+/*
+RVExtension (Extension main call)
+*/
+#ifdef WIN32
+int __stdcall RVExtensionArgs(char *output, int outputSize, const char *function, const char **args, int argsCnt) {
+#elif __linux__
+int RVExtensionArgs(char *output, int outputSize, const char *function, const char **args, int argsCnt) {
+#endif
+    return server->callExtensionEntrypoint(output, outputSize, function, args, argsCnt);
+}
+
+/*
+Only alternative syntax
+*/
+#ifdef WIN32
+void __stdcall RVExtension(char *_output, int _outputSize, char *_function) {
+#elif __linux__
+void RVExtension(char *_output, int _outputSize, char *_function) {
+#endif
+    strncpy_s(_output, _outputSize, "Unsupported", _TRUNCATE);
+}
+
+/*
+Version
+*/
+#ifdef WIN32
+void __stdcall RVExtensionVersion(char *output, int outputSize) {
+#elif __linux__
+void RVExtensionVersion(char *_output, int _outputSize) {
+#endif
+    //--- max outputSize is 32 bytes
+    if (!server) {
+        extensionInit();
+    }
+    strncpy_s(output, outputSize, EXTENSION_VERSION, _TRUNCATE);
+}
