@@ -25,7 +25,7 @@ DBManager::DBManager(const rapidjson::Value& cons) {
         auto config = itr->value.GetObject();
 
         if (config.HasMember("enable") && !config["enable"].GetBool()) {
-            return;
+            continue;
         }
 
         DBConfig dbConf;
