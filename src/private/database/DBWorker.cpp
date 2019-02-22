@@ -1,5 +1,7 @@
 
 #include <database/DBWorker.hpp>
+#include <epochserver/epochserver.hpp>
+using namespace std::literals::string_literals;
 
 DBWorker::DBWorker(const DBConfig& dbConfig) {
     this->dbConfig = dbConfig;
@@ -12,7 +14,7 @@ DBWorker::DBWorker(const DBConfig& dbConfig) {
         this->dbConnectors.emplace_back(
             std::pair < std::thread::id, DBConRef >(
                 std::thread::id(), nullptr
-                )
+            )
         );
     }
 
@@ -21,8 +23,6 @@ DBWorker::DBWorker(const DBConfig& dbConfig) {
 
 DBWorker::~DBWorker() {
 }
-
-#include <epochserver/epochserver.hpp>
 
 void DBWorker::callbackResultIfNeeded(
     const DBReturn& result,
@@ -65,7 +65,7 @@ void DBWorker::callbackResultIfNeeded(
             }
             // string,int
             case 3: {
-                buffer << "[\"" << std::get<std::string>(result) << "\"," << std::to_string(std::get<int>(result)) << "]";
+                buffer << "[\"" << std::get<std::pair<std::string,int>>(result).first << "\"," << std::to_string(std::get<std::pair<std::string,int>>(result).second) << "]";
                 break;
             }
             // vector string
@@ -141,7 +141,7 @@ DBConRef DBWorker::getConnector() {
         };
     }
     catch (const std::runtime_error& e) {
-        WARNING(std::string("Runtime Error during connector creation:") + e.what());
+        WARNING("Runtime Error during connector creation: "s + e.what());
         throw std::runtime_error("Could not create database connector");
     }
     if (!connector) {

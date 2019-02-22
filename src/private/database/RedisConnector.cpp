@@ -2,6 +2,7 @@
 
 #include <sstream>
 
+using namespace std::literals::string_literals;
 
 RedisConnector::RedisConnector(const DBConfig& Config) {
     this->config = config;
@@ -27,7 +28,7 @@ RedisConnector::RedisConnector(const DBConfig& Config) {
 
     }
     catch (cpp_redis::redis_error& e) {
-        throw std::runtime_error(std::string("Error creating the redis connector: ") + e.what() );
+        throw std::runtime_error("Error creating the redis connector: "s + e.what() );
     }
 }
 

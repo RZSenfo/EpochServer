@@ -1,6 +1,7 @@
 
 #include <database/SQLiteConnector.hpp>
 
+using namespace std::literals::string_literals;
 SQLiteConnector::SQLiteConnector(const DBConfig& config) {
     this->config = config;
 
@@ -21,7 +22,7 @@ SQLiteConnector::SQLiteConnector(const DBConfig& config) {
 
     }
     catch (SQLite::Exception& e) {
-        WARNING(std::string("Error during SQLLite Setup: ") + e.what());
+        WARNING("Error during SQLLite Setup: "s + e.what());
     }
 
     if (!ref || !ref->SQLiteDB) {
@@ -54,7 +55,7 @@ SQLiteConnector::SQLiteConnector(const DBConfig& config) {
             INFO("Database ready!");
         }
         catch (SQLite::Exception& e) {
-            throw std::runtime_error("Failed to create the key value table");
+            throw std::runtime_error("Failed to create the key value table: "s + e.what());
         }
     }
     else {
@@ -91,6 +92,7 @@ std::vector< std::string > SQLiteConnector::keys(const std::string& prefix) {
         return ret;
     }
     catch (SQLite::Exception& e) {
+        WARNING("Query failed: "s + e.what());
         return {};
     }
 }
@@ -112,6 +114,7 @@ std::string SQLiteConnector::get(const std::string& key) {
         return query.getColumn(0);
     }
     catch (SQLite::Exception& e) {
+        WARNING("Query failed: "s + e.what());
         return "";
     }
 }
@@ -148,6 +151,7 @@ std::pair<std::string, int> SQLiteConnector::getWithTtl(const std::string& key) 
 
     }
     catch (SQLite::Exception& e) {
+        WARNING("Query failed: "s + e.what());
         return { "", -1 };
     }
 }
@@ -166,6 +170,7 @@ bool SQLiteConnector::exists(const std::string& key) {
         return query.executeStep();
     }
     catch (SQLite::Exception& e) {
+        WARNING("Query failed: "s + e.what());
         return false;
     }
 }
@@ -189,6 +194,7 @@ bool SQLiteConnector::set(const std::string& key, const std::string& value) {
         return query.exec() != 0;
     }
     catch (SQLite::Exception& e) {
+        WARNING("Query failed: "s + e.what());
         return false;
     }
 }
@@ -209,6 +215,7 @@ bool SQLiteConnector::setEx(const std::string& key, int ttl, const std::string& 
         return query.exec() != 0;
     }
     catch (SQLite::Exception& e) {
+        WARNING("Query failed: "s + e.what());
         return false;
     }
 }
@@ -228,6 +235,7 @@ bool SQLiteConnector::expire(const std::string& key, int ttl) {
         return query.exec() != 0;
     }
     catch (SQLite::Exception& e) {
+        WARNING("Query failed: "s + e.what());
         return false;
     }
 }
@@ -250,6 +258,7 @@ bool SQLiteConnector::del(const std::string& key) {
         return query.exec() != 0;
     }
     catch (SQLite::Exception& e) {
+        WARNING("Query failed: "s + e.what());
         return false;
     }
 }
@@ -282,6 +291,7 @@ int SQLiteConnector::ttl(const std::string& key) {
 
     }
     catch (SQLite::Exception& e) {
+        WARNING("Query failed: "s + e.what());
         return -1;
     }
 }
