@@ -12,12 +12,14 @@
 #include <filesystem>
 #include <random>
 
+using namespace std::literals::string_literals;
+
 EpochServer::EpochServer() {
     
     bool error = false;
     
-    auto cur_path = std::filesystem::path();
-    INFO( std::string("Looking for Server config file.. (Base: ") + cur_path.generic_string() + ")" );
+    auto cur_path = std::filesystem::current_path();
+    INFO( "Looking for Server config file.. (Base: "s + cur_path.generic_string() + ")" );
 
     std::filesystem::path configFilePath("@epochserver/config.json");
     if (!std::filesystem::exists(configFilePath)) {
@@ -313,7 +315,7 @@ void EpochServer::log(const std::string& log) {
 
 #define SET_RESULT(x,y) outCode = x; out = y;
 #define STR_MOVE(x) std::move(std::string(x))
-#define THROW_ARGS_INVALID_NUM(x) throw std::runtime_error(std::string("Invalid number of args for ") + x)
+#define THROW_ARGS_INVALID_NUM(x) throw std::runtime_error("Invalid number of args for "s + x)
 
 // TODO test if moving args works
 int EpochServer::callExtensionEntrypoint(char *output, int outputSize, const char *function, const char **args, int argsCnt) {
@@ -667,7 +669,7 @@ void EpochServer::beEntrypoint(std::string& out, int outputSize, int& outCode, c
                     dur = std::stoi(args[2]);
                 }
                 catch (...) {
-                    WARNING(std::string("Could not parse banDuration, fallback to permaban. GUID: ") + args[0]);
+                    WARNING("Could not parse banDuration, fallback to permaban. GUID: "s + args[0]);
                 }
             }
             threadpool->fireAndForget([this, uid = std::string(args[0]), msg = std::move(msg), dur]() {
