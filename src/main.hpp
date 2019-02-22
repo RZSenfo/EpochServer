@@ -93,4 +93,11 @@ namespace utils {
 #endif
 };
 
+namespace std {
+    _NODISCARD inline string to_string(bool _Val)
+    {	// convert bool to string
+        return _Val ? "true" : "false";
+    }
+}
+
 #endif
