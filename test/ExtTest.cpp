@@ -89,27 +89,33 @@ int main() {
 		std::getline(std::cin, callfunction);
 		if (callfunction == "end") break;
 	
-		std::cout << "Enter the function args (empty to finish): ";
+		std::cout << "Enter the function args (empty to finish): " << std::endl;
 
-        std::vector<std::string> args_str;
-		std::vector<const char *> args;
+        std::vector<std::string> args;
 
 		while (true) {
-			std::string arg;
-			std::getline(std::cin, arg);
 			
-			if (arg.empty()) {
+            args.emplace_back();
+			std::getline(std::cin, args.back());
+			
+			if (args.back().empty()) {
 				break;
-			} else {
-                args_str.emplace_back(arg);
-				args.emplace_back(args_str.back().c_str());
 			}
 		}
 
+        std::vector<const char*> cstrings;
+        cstrings.reserve(args.size());
+
+        for (size_t i = 0; i < args.size() - 1; ++i) {
+            cstrings.push_back(const_cast<char*>(args[i].c_str()));
+        }
+
+        const char ** arg_ptr = static_cast<const char**>(cstrings.empty() ? nullptr : &cstrings[0]);
+
         std::string output(8000, ' ');
-		func(output.data(), output.size(), callfunction.c_str(), args.data(), args.size());
+		func(output.data(), output.size(), callfunction.c_str(), arg_ptr, cstrings.size());
 		
-		std::cout << "The extension returned: " << output.c_str() << std::endl << std::endl;
+		std::cout << "The extension returned: " << output.c_str() << std::endl;
 
 	};
 
